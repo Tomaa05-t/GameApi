@@ -1,12 +1,10 @@
 <!doctype html>
 <html lang="it">
 <head>
-    <title>Briscola a Chiamata - Locale</title>
+    <title>Briscola a Chiamata - Online</title>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
-
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" />
-    
     <link rel="stylesheet" href="style.css">
 </head>
 
@@ -38,98 +36,101 @@
             <div class="spinner-border text-primary" role="status"></div>
             <h2 class="mt-3 text-white">In attesa di giocatori...</h2>
             <p class="text-white-50">Giocatori pronti: <span id="count-giocatori">1</span> / 5</p>
-            <button id="btn-simula-unione" class="btn btn-outline-light btn-sm mt-4">Simula unione giocatore (Test)</button>
         </div>
 
         <div id="tavolo-gioco" class="tavolo-container d-none">
             
-            <div id="centro-tavolo" class="area-gioco-centro">
+            <div id="centro-tavolo" class="area-gioco-centro"></div>
+
+            <div id="info-partita-corso" class="position-absolute start-50 translate-middle-x d-none" style="top: 20px; z-index: 100;">
+                <div class="card bg-dark border-warning text-white text-center p-2" style="min-width: 180px;">
+                    <small class="text-warning">PARTITA IN CORSO</small>
+                    <div class="h5 m-0">
+                        <span id="visualizza-numero-chiamato"></span> di <span id="visualizza-briscola"></span>
+                    </div>
+                    <small class="text-muted">Il socio ha questa carta</small>
+                </div>
+            </div>
+
+            <div id="interfaccia-asta" class="asta-panel shadow-lg p-3 bg-dark text-white rounded">
+                <h4 class="text-warning">Fase di Asta</h4>
+                <p>Carta attuale: <strong id="valore-asta-carta">ASSO</strong></p>
+                
+                <div class="input-group mb-3">
+                    <select id="select-numero" class="form-select">
+                        <option value="1">Asso</option>
+                        <option value="3">Tre</option>
+                        <option value="10">Re</option>
+                        <option value="9">Cavallo</option>
+                        <option value="8">Fante</option>
+                        <option value="7">7</option>
+                        <option value="6">6</option>
+                        <option value="5">5</option>
+                        <option value="4">4</option>
+                        <option value="2">2</option>
+                    </select>
+                    <button id="btn-chiama" class="btn btn-primary">Chiama</button>
+                    <button id="btn-passo" class="btn btn-danger">Lascia</button>
                 </div>
 
-
-                
-        <div id="interfaccia-asta" class="asta-panel shadow-lg p-3 bg-dark text-white rounded">
-            <h4 class="text-warning">Fase di Asta</h4>
-            <p>Carta attuale: <strong id="valore-asta-carta">ASSO</strong></p>
-            
-            <div class="input-group mb-3">
-                <select id="select-numero" class="form-select">
-                    <option value="1">Asso</option>
-                    <option value="3">Tre</option>
-                    <option value="10">Re</option>
-                    <option value="9">Cavallo</option>
-                    <option value="8">Fante</option>
-                    <option value="7">7</option>
-                    <option value="6">6</option>
-                    <option value="5">5</option>
-                    <option value="4">4</option>
-                    <option value="2">2</option>
-                </select>
-                <button id="btn-chiama" class="btn btn-primary">Chiama</button>
-                <button id="btn-passo" class="btn btn-danger">Lascia</button>
+                <div id="scelta-seme" class="d-none mt-3 border-top pt-2">
+                    <p>Hai vinto l'asta! Scegli il seme:</p>
+                    <select id="select-seme" class="form-select mb-2">
+                        <option value="bastoni">Bastoni</option>
+                        <option value="coppe">Coppe</option>
+                        <option value="denari">Denari</option>
+                        <option value="spade">Spade</option>
+                    </select>
+                    <button id="btn-conferma-chiamata" class="btn btn-success w-100">Conferma Chiamata</button>
+                </div>
             </div>
-
-
-
-            <div id="scelta-seme" class="d-none mt-3 border-top pt-2">
-                <p>Hai vinto l'asta! Scegli il seme:</p>
-                <select id="select-seme" class="form-select mb-2">
-                    <option value="bastoni">Bastoni</option>
-                    <option value="coppe">Coppe</option>
-                    <option value="denari">Denari</option>
-                    <option value="spade">Spade</option>
-                </select>
-                <button id="btn-conferma-chiamata" class="btn btn-success w-100">Conferma Chiamata</button>
-            </div>
-        </div>
 
             <div id="player-sud" class="postazione giocatore-reale">
-                <div class="info-giocatore bg-success rounded-pill px-3 py-1 mb-2">
-                    <span class="nome">Tu</span>
-                    <span class="badge bg-light text-dark ms-2">8 carte</span>
+                <div class="info-giocatore bg-success rounded-pill px-3 py-1 mb-2 shadow">
+                    <span id="nome-sud" class="fw-bold">Tu</span>
+                    <span class="badge bg-warning text-dark ms-2">Punti: <span id="punti-sud">0</span></span>
                 </div>
-                <div id="mie-carte" class="mano">
-                    </div>
+                <div id="mie-carte" class="mano"></div>
             </div>
             
             <div id="player-ovest" class="postazione avversario">
-                <div class="info-giocatore bg-dark rounded p-1 mb-1">CPU 2</div>
-                <div class="mazzetto-coperto">
-                    </div>
-            </div>
-
-            <div id="player-nord-ovest" class="postazione avversario">
-                <div class="info-giocatore bg-dark rounded p-1 mb-1">CPU 3</div>
+                <div class="info-giocatore bg-dark border border-secondary rounded p-1 mb-1 shadow">
+                    <div id="nome-ovest">Giocatore 2</div>
+                    <span class="badge bg-secondary">Punti: <span id="punti-ovest">0</span></span>
+                </div>
                 <div class="mazzetto-coperto"></div>
             </div>
 
-<div id="info-partita-corso" class="position-absolute start-50 translate-middle-x d-none" style="top: 20px; z-index: 100;">
-    <div class="card bg-dark border-warning text-white text-center p-2" style="min-width: 180px;">
-        <small class="text-warning">PARTITA IN CORSO</small>
-        <div class="h5 m-0">
-            <span id="visualizza-numero-chiamato"></span> di <span id="visualizza-briscola"></span>
-        </div>
-        <small class="text-muted">Il socio ha questa carta</small>
-    </div>
-</div>
-
+            <div id="player-nord-ovest" class="postazione avversario">
+                <div class="info-giocatore bg-dark border border-secondary rounded p-1 mb-1 shadow">
+                    <div id="nome-nord-ovest">Giocatore 3</div>
+                    <span class="badge bg-secondary">Punti: <span id="punti-nord-ovest">0</span></span>
+                </div>
+                <div class="mazzetto-coperto"></div>
+            </div>
 
             <div id="player-nord-est" class="postazione avversario">
-                <div class="info-giocatore bg-dark rounded p-1 mb-1">CPU 4</div>
+                <div class="info-giocatore bg-dark border border-secondary rounded p-1 mb-1 shadow">
+                    <div id="nome-nord-est">Giocatore 4</div>
+                    <span class="badge bg-secondary">Punti: <span id="punti-nord-est">0</span></span>
+                </div>
                 <div class="mazzetto-coperto"></div>
             </div>
 
             <div id="player-est" class="postazione avversario">
-                <div class="info-giocatore bg-dark rounded p-1 mb-1">CPU 5</div>
+                <div class="info-giocatore bg-dark border border-secondary rounded p-1 mb-1 shadow">
+                    <div id="nome-est">Giocatore 5</div>
+                    <span class="badge bg-secondary">Punti: <span id="punti-est">0</span></span>
+                </div>
                 <div class="mazzetto-coperto"></div>
             </div>
+
         </div>
     </main>
 
     <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.8/dist/umd/popper.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.min.js"></script>
-
-
+    
     <script src="/socket.io/socket.io.js"></script>
 
     <script src="cards.js"></script>     

@@ -2,89 +2,128 @@ const socket = io();
 
 // --- 1. ASCOLTO SERVER (Sincronizzazione) ---
 
-// Aggiorna il numero di persone nella lobby
 socket.on('aggiorna_giocatori', (conteggio) => {
     GameState.giocatoriConnessi = conteggio;
     renderGame();
 });
 
-// Riceve l'ordine di iniziare l'asta
 socket.on('inizia_asta', (dati) => {
     avviaPartitaReale(dati.prossimoGiocatoreId);
 });
 
-// Aggiornamento durante i rilanci dell'asta
 socket.on('aggiorna_asta', (dati) => {
     if (dati.ultimoValore) {
         document.getElementById('valore-asta-carta').innerText = dati.ultimoValore;
-        
-        // Sincronizziamo l'indice locale per sapere quale carta è stata chiamata
-        if (dati.indice !== undefined) {
-            indiceAttualeAsta = dati.indice;
-        }
+        if (dati.indice !== undefined) indiceAttualeAsta = dati.indice;
     }
-
     GameState.mioTurno = (socket.id === dati.prossimoGiocatoreId);
     gestisciVisibilitaAsta();
 });
 
-// Fine dell'asta: uno vince, gli altri aspettano
 socket.on('fine_asta', (dati) => {
     GameState.mioTurno = (socket.id === dati.vincitoreId);
-    
     if (GameState.mioTurno) {
-        // Riattiviamo l'interfaccia per il vincitore affinché possa scegliere il seme
         const interfacciaAsta = document.getElementById('interfaccia-asta');
         interfacciaAsta.classList.remove('opacity-50', 'd-none');
         interfacciaAsta.style.pointerEvents = "auto";
-        
-        alert("Hai vinto l'asta! Ora scegli il seme.");
         fineAstaUmano(); 
     } else {
-        // Nascondiamo l'asta agli altri e mostriamo un messaggio di attesa
         document.getElementById('interfaccia-asta').classList.add('d-none');
-        alert("L'asta è finita. Vince " + dati.vincitoreNome + ". In attesa della scelta del seme...");
     }
 });
 
-// Inizio effettivo del gioco (dopo che il vincitore ha scelto il seme)
+// Inizio partita: riceve chi deve iniziare a giocare
 socket.on('inizio_partita_sincronizzato', (dati) => {
     GameState.fase = 'GIOCANDO';
     GameState.briscola = dati.seme;
     GameState.cartaChiamata = dati.carta;
+    GameState.mioTurno = (socket.id === dati.prossimoTurnoId);
 
-    // Pulizia totale interfaccia asta
     document.getElementById('interfaccia-asta').classList.add('d-none');
     
-    // Mostriamo il box informativo della partita in corso
     const infoPartita = document.getElementById('info-partita-corso');
     if (infoPartita) {
         infoPartita.classList.remove('d-none');
         document.getElementById('visualizza-numero-chiamato').innerText = dati.carta;
         document.getElementById('visualizza-briscola').innerText = dati.seme.toUpperCase();
     }
-
     renderGame();
 });
 
-// --- 2. LOGICA DI TRANSIZIONE E STATO ---
+// AGGIORNAMENTO TAVOLO: Riceve la carta giocata da qualcuno
+socket.on('aggiorna_tavolo', (dati) => {
+    if (dati.giocatoreId !== socket.id) {
+        disegnaCartaAlCentro(dati.carta, dati.giocatoreId);
+    }
+    GameState.mioTurno = (socket.id === dati.prossimoTurnoId);
+    // Opzionale: aggiungi una classe CSS per illuminare il bordo del giocatore di turno
+});
+
+// FINE MANO: Qualcuno ha vinto la presa
+socket.on('fine_mano', (dati) => {
+    // Aggiorna i punti nell'HTML
+    Object.keys(dati.puntiAggiornati).forEach(id => {
+        let spanPunti;
+        if (id === socket.id) spanPunti = document.getElementById('punti-sud');
+        // Qui andrebbe una logica per mappare gli ID socket alle posizioni Est/Ovest/Nord
+        if (spanPunti) spanPunti.innerText = dati.puntiAggiornati[id];
+    });
+
+    // Pulisce il tavolo dopo 2 secondi
+    setTimeout(() => {
+        document.getElementById('centro-tavolo').innerHTML = '';
+        GameState.mioTurno = (socket.id === dati.prossimoTurnoId);
+    }, 2000);
+});
+
+// --- 2. LOGICA DI GIOCO ---
+
+function giocaCartaUmano(index) {
+    if (GameState.fase !== 'GIOCANDO' || !GameState.mioTurno) {
+        alert("Non è il tuo turno!");
+        return;
+    }
+
+    const cartaGiocata = GameState.miaMano.splice(index, 1)[0];
+    
+    // Disegna localmente
+    disegnaCartaAlCentro(cartaGiocata, socket.id);
+    disegnaManoReale(GameState.miaMano);
+
+    // Invia al server
+    socket.emit('gioca_carta', { carta: cartaGiocata });
+    GameState.mioTurno = false;
+}
+
+function disegnaCartaAlCentro(carta, giocatoreId) {
+    const centro = document.getElementById('centro-tavolo');
+    const img = document.createElement('img');
+    img.src = carta.img;
+    img.className = 'carta-tavolo'; // Aggiungi stile CSS per posizionarle a raggiera
+    img.style.width = "80px";
+    
+    // Semplice posizionamento: se sono io sta sotto, altrimenti sopra
+    if (giocatoreId === socket.id) {
+        img.style.border = "2px solid gold";
+    }
+    
+    centro.appendChild(img);
+}
+
+// --- 3. LOGICA ASTA E LOBBY (Invariata) ---
 
 function preparaAttesa() {
     GameState.fase = 'ATTESA';
     renderGame();
-    socket.emit('unisciti_partita', "Giocatore_" + socket.id.substring(0,4));
+    socket.emit('unisciti_partita', prompt("Inserisci il tuo nome:") || "Player");
 }
 
 function avviaPartitaReale(idChiInizia) {
-    indiceAttualeAsta = -1; // Reset ordine carte per l'asta
-    
-    // Distribuzione carte (Momentanea: in futuro sarà fatta dal server)
+    indiceAttualeAsta = -1; 
     const mazzoMischiato = [...mazzo].sort(() => Math.random() - 0.5);
     GameState.miaMano = mazzoMischiato.slice(0, 8);
-    
     GameState.fase = 'ASTA';
     GameState.mioTurno = (socket.id === idChiInizia);
-    
     renderGame();
     gestisciVisibilitaAsta();
 }
@@ -92,142 +131,52 @@ function avviaPartitaReale(idChiInizia) {
 function gestisciVisibilitaAsta() {
     const interfacciaAsta = document.getElementById('interfaccia-asta');
     if (!interfacciaAsta) return;
-
-    if (GameState.mioTurno && GameState.fase === 'ASTA') {
-        interfacciaAsta.classList.remove('opacity-50');
-        interfacciaAsta.style.pointerEvents = "auto";
-    } else {
-        interfacciaAsta.classList.add('opacity-50');
-        interfacciaAsta.style.pointerEvents = "none";
-    }
+    interfacciaAsta.classList.toggle('opacity-50', !GameState.mioTurno);
+    interfacciaAsta.style.pointerEvents = GameState.mioTurno ? "auto" : "none";
 }
 
-// --- 3. VARIABILI E LOGICA ASTA ---
-let ordineCarteAsta = [1, 3, 10, 9, 8, 7, 6, 5, 4, 2]; // Ordine Briscola Chiamata
+let ordineCarteAsta = [1, 3, 10, 9, 8, 7, 6, 5, 4, 2];
 let indiceAttualeAsta = -1; 
 
 function fineAstaUmano() {
-    // Nascondiamo i controlli della chiamata
-    const elementiDaNascondere = ['btn-chiama', 'btn-passo', 'select-numero'];
-    elementiDaNascondere.forEach(id => {
-        const el = document.getElementById(id);
-        if(el) el.classList.add('d-none');
+    ['btn-chiama', 'btn-passo', 'select-numero'].forEach(id => {
+        document.getElementById(id)?.classList.add('d-none');
     });
-
-    // Mostriamo il div per la scelta del seme
-    const divSeme = document.getElementById('scelta-seme');
-    if (divSeme) {
-        divSeme.classList.remove('d-none');
-        divSeme.style.pointerEvents = "auto";
-    }
+    document.getElementById('scelta-seme')?.classList.remove('d-none');
 }
 
-// --- 4. EVENTI DOM ---
+// --- 4. RENDER E EVENTI ---
 
-document.addEventListener("DOMContentLoaded", () => {
-    if (!GameState.fase) GameState.fase = 'LOBBY';
-    renderGame();
+function renderGame() {
+    const areaLobby = document.getElementById('area-lobby');
+    const areaAttesa = document.getElementById('area-attesa');
+    const tavoloGioco = document.getElementById('tavolo-gioco');
 
-    // Bottone Crea/Unisciti
-    const btnCrea = document.getElementById('btn-crea');
-    if (btnCrea) {
-        btnCrea.onclick = (e) => {
-            e.preventDefault();
-            preparaAttesa();
-        };
+    areaLobby.classList.toggle('d-none', GameState.fase !== 'LOBBY');
+    areaAttesa.classList.toggle('d-none', GameState.fase !== 'ATTESA');
+    tavoloGioco.classList.toggle('d-none', !['ASTA', 'GIOCANDO'].includes(GameState.fase));
+
+    if (GameState.fase === 'ATTESA') {
+        document.getElementById('count-giocatori').innerText = GameState.giocatoriConnessi;
     }
 
-    // Bottone Chiama (Rilancio asta)
-    const btnChiama = document.getElementById('btn-chiama');
-    if (btnChiama) {
-        btnChiama.onclick = (e) => {
-            e.preventDefault();
-            if (!GameState.mioTurno) return;
-
-            const select = document.getElementById('select-numero');
-            const scelta = parseInt(select.value);
-            const indiceScelta = ordineCarteAsta.indexOf(scelta);
-
-            // Controllo se la carta chiamata è più "bassa" (secondo l'ordine di briscola)
-            if (indiceScelta > indiceAttualeAsta) {
-                socket.emit('mossa_asta', { 
-                    tipo: 'CHIAMATA',
-                    valore: select.options[select.selectedIndex].text,
-                    indice: indiceScelta 
-                });
-            } else {
-                alert("Devi chiamare una carta più bassa (es. se c'è l'Asso devi chiamare il Tre)!");
-            }
-        };
+    if (GameState.fase === 'ASTA' || GameState.fase === 'GIOCANDO') {
+        disegnaManoReale(GameState.miaMano);
+        disegnaAvversari();
     }
-
-    // Bottone Passo (Uscita definitiva dall'asta)
-    const btnPasso = document.getElementById('btn-passo');
-    if (btnPasso) {
-        btnPasso.onclick = (e) => {
-            e.preventDefault();
-            if (!GameState.mioTurno) return;
-            socket.emit('mossa_asta', { tipo: 'PASSO' });
-        };
-    }
-
-    // Bottone Conferma Seme (Solo per il vincitore dell'asta)
-    const btnConferma = document.getElementById('btn-conferma-chiamata');
-    if (btnConferma) {
-        btnConferma.onclick = (e) => {
-            e.preventDefault();
-            const semeScelto = document.getElementById('select-seme').value;
-            const numeroChiamatoText = document.getElementById('valore-asta-carta').innerText;
-
-            socket.emit('scelta_briscola', {
-                seme: semeScelto,
-                carta: numeroChiamatoText
-            });
-        };
-    }
-});
-
-// --- 5. FUNZIONI DI DISEGNO (Grafica) ---
+}
 
 function disegnaManoReale(carte) {
     const contenitore = document.getElementById('mie-carte');
     if (!contenitore) return;
     contenitore.innerHTML = '';
-
     carte.forEach((carta, index) => {
         const img = document.createElement('img');
         img.src = carta.img;
         img.className = 'carta-mano';
-        img.style.width = "90px";
-        img.style.margin = "5px";
-        img.style.cursor = "pointer";
         img.onclick = () => giocaCartaUmano(index);
         contenitore.appendChild(img);
     });
-}
-
-function giocaCartaUmano(index) {
-    if (GameState.fase !== 'GIOCANDO') return;
-    
-    // Rimuove la carta dalla mano e la mette al centro
-    const cartaGiocata = GameState.miaMano.splice(index, 1)[0];
-    const centro = document.getElementById('centro-tavolo');
-
-    const img = document.createElement('img');
-    img.src = cartaGiocata.img;
-    img.style.width = "80px";
-    img.style.position = "absolute";
-    img.style.bottom = "10px";
-    img.style.left = "50%";
-    img.style.transform = "translateX(-50%)";
-    img.style.zIndex = "50";
-    centro.appendChild(img);
-
-    disegnaManoReale(GameState.miaMano);
-
-    if (centro.children.length >= 5) {
-        setTimeout(() => { centro.innerHTML = ''; }, 2000);
-    }
 }
 
 function disegnaAvversari() {
@@ -236,10 +185,43 @@ function disegnaAvversari() {
         box.innerHTML = '';
         for(let i=0; i<8; i++) {
             const img = document.createElement('img');
-            img.src = 'carte/retro.jpg';
+            img.src = 'carte/retro.jpg'; // Assicurati che il percorso sia corretto
             img.style.width = '40px';
-            img.style.margin = '-15px';
             box.appendChild(img);
         }
     });
 }
+
+document.addEventListener("DOMContentLoaded", () => {
+    if (!GameState.fase) GameState.fase = 'LOBBY';
+    renderGame();
+
+    document.getElementById('btn-crea').onclick = () => preparaAttesa();
+
+    document.getElementById('btn-chiama').onclick = () => {
+        if (!GameState.mioTurno) return;
+        const select = document.getElementById('select-numero');
+        const scelta = parseInt(select.value);
+        const indiceScelta = ordineCarteAsta.indexOf(scelta);
+
+        if (indiceScelta > indiceAttualeAsta) {
+            socket.emit('mossa_asta', { 
+                tipo: 'CHIAMATA',
+                valore: select.options[select.selectedIndex].text,
+                indice: indiceScelta 
+            });
+        } else {
+            alert("Devi chiamare una carta più bassa!");
+        }
+    };
+
+    document.getElementById('btn-passo').onclick = () => {
+        if (GameState.mioTurno) socket.emit('mossa_asta', { tipo: 'PASSO' });
+    };
+
+    document.getElementById('btn-conferma-chiamata').onclick = () => {
+        const semeScelto = document.getElementById('select-seme').value;
+        const numeroChiamatoText = document.getElementById('valore-asta-carta').innerText;
+        socket.emit('scelta_briscola', { seme: semeScelto, carta: numeroChiamatoText });
+    };
+});
