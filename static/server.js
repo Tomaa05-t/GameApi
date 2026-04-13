@@ -10,10 +10,11 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 app.use(cors());
-app.use(express.static(__dirname));
+app.use(express.static(path.join(__dirname, 'gamepapi', 'static')));
 
 app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'index.html'));
+    // Punta a gamepapi/static/index.html
+    res.sendFile(path.join(__dirname, 'gamepapi', 'static', 'index.html'));
 });
 
 const server = createServer(app);
