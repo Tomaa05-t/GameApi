@@ -1,0 +1,118 @@
+/* static/style.css */
+
+body {
+    background-color: #1a1a1a;
+    color: white;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    margin: 0;
+    height: 100vh;
+    overflow: hidden; /* Evita lo scroll durante il gioco */
+}
+
+/* IL TAVOLO VERDE */
+.tavolo-container {
+    position: relative;
+    width: 95vw;
+    height: 85vh;
+    background: radial-gradient(circle, #2e7d32 0%, #1b5e20 100%);
+    border: 12px solid #3e2723; /* Bordo legno */
+    border-radius: 200px;
+    margin: 20px auto;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+}
+
+/* POSIZIONI DEI GIOCATORI */
+.postazione {
+    position: absolute;
+    text-align: center;
+    z-index: 10;
+}
+
+#player-sud { bottom: 30px; left: 50%; transform: translateX(-50%); }
+#player-ovest { left: 50px; top: 50%; transform: translateY(-50%); }
+#player-nord-ovest { left: 20%; top: 50px; }
+#player-nord-est { right: 20%; top: 50px; }
+#player-est { right: 50px; top: 50%; transform: translateY(-50%); }
+
+/* LE TUE CARTE */
+.mano {
+    display: flex;
+    justify-content: center;
+    padding-top: 10px;
+}
+
+.carta img {
+    width: 90px;
+    height: auto;
+    border-radius: 5px;
+    box-shadow: 2px 2px 5px rgba(0,0,0,0.3);
+    margin: 0 -10px; /* Effetto ventaglio meno aggressivo */
+    transition: transform 0.2s;
+    cursor: pointer;
+}
+
+.carta img:hover {
+    transform: translateY(-30px) scale(1.1);
+    z-index: 100;
+}
+
+/* CARTE DEGLI AVVERSARI (Dorsi) */
+.mazzetto-coperto {
+    display: flex;
+    justify-content: center;
+}
+
+.mazzetto-coperto img {
+    width: 40px;
+    height: auto;
+    border: 1px solid rgba(255,255,255,0.2);
+    border-radius: 3px;
+}
+
+/* PANNELLO DELL'ASTA (CENTRALE E SOPRA TUTTO) */
+.asta-panel {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 2000; /* Molto alto per stare sopra le carte */
+    min-width: 320px;
+    background-color: #212529 !important; /* Grigio scuro Bootstrap */
+    border: 3px solid #ffc107; /* Giallo briscola */
+    padding: 20px;
+    border-radius: 15px;
+    box-shadow: 0 0 30px rgba(0,0,0,0.8);
+    text-align: center;
+}
+
+/* AREA GIOCO CENTRALE */
+#centro-tavolo {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 300px;
+    height: 180px;
+    border: 2px dashed rgba(255,255,255,0.1);
+    border-radius: 20px;
+    pointer-events: none; /* Non blocca i click sotto */
+}
+
+/* UTILITY */
+.d-none { display: none !important; }
+
+.info-giocatore {
+    font-size: 0.85rem;
+    background: rgba(0,0,0,0.7);
+    padding: 5px 12px;
+    border-radius: 20px;
+    color: #fff;
+    margin-bottom: 5px;
+}
+
+
+#info-partita-corso {
+    top: 15px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+    border-radius: 10px;
+}
