@@ -1,14 +1,17 @@
 const socket = io();
 
 // --- STATO LOCALE DEL GIOCO ---
-let GameState = {
-    fase: 'LOBBY',
-    giocatoriConnessi: 0,
-    mioTurno: false,
-    miaMano: [],
-    briscola: null,
-    cartaChiamata: null
-};
+// Sostituisci la vecchia riga "let GameState = {..." con questa:
+if (typeof GameState === 'undefined') {
+    var GameState = {
+        fase: 'LOBBY',
+        giocatoriConnessi: 0,
+        mioTurno: false,
+        miaMano: [],
+        briscola: null,
+        cartaChiamata: null
+    };
+}
 
 let mappaPosti = {}; 
 const posizioniAvversari = ['ovest', 'nord-ovest', 'nord-est', 'est'];
