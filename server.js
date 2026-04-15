@@ -27,13 +27,14 @@ let indiceTurnoAsta = 0;
 // Variabili di Gioco
 let briscolaCorrente = null;
 let cartaChiamataCorrente = null;
-let indiceTurnoGiocata = 0; // Chi deve tirare la carta
-let carteSulTavolo = [];    // Array di {giocatoreId, carta}
-let puntiGiocatori = {};    // { socketId: punteggio }
+let indiceTurnoGiocata = 0; 
+let carteSulTavolo = [];    
+let puntiGiocatori = {};    
 
 io.on('connection', (socket) => {
     console.log('Giocatore connesso:', socket.id);
 
+    // 1. GESTIONE INGRESSO
     socket.on('unisciti_partita', (nome) => {
         if (giocatoriConnessi.length < 5) {
             if (!giocatoriConnessi.find(g => g.id === socket.id)) {
@@ -41,7 +42,7 @@ io.on('connection', (socket) => {
                     id: socket.id, 
                     nome: nome || `Giocatore ${giocatoriConnessi.length + 1}` 
                 });
-                puntiGiocatori[socket.id] = 0; // Inizializza punti
+                puntiGiocatori[socket.id] = 0; 
             }
             io.emit('aggiorna_giocatori', giocatoriConnessi.length);
 
@@ -53,7 +54,7 @@ io.on('connection', (socket) => {
         }
     });
 
-    // --- GESTIONE ASTA ---
+    // 2. GESTIONE ASTA
     socket.on('mossa_asta', (dati) => {
         if (socket.id !== giocatoriInAsta[indiceTurnoAsta]) return;
 
@@ -79,50 +80,45 @@ io.on('connection', (socket) => {
         }
     });
 
-    // --- INIZIO PARTITA ---
+    // 3. SCELTA BRISCOLA E INIZIO
     socket.on('scelta_briscola', (dati) => {
         briscolaCorrente = dati.seme;
         cartaChiamataCorrente = dati.carta;
         
-        // Il primo a giocare è il primo che si è connesso (indice 0)
-        // O puoi impostare il vincitore dell'asta: indiceTurnoGiocata = giocatoriConnessi.findIndex(g => g.id === socket.id);
-        indiceTurnoGiocata = 0; 
+        // Il vincitore dell'asta è il primo a giocare
+        indiceTurnoGiocata = giocatoriConnessi.findIndex(g => g.id === socket.id);
         carteSulTavolo = [];
 
         io.emit('inizio_partita_sincronizzato', {
             seme: dati.seme,
             carta: dati.carta,
-            prossimoTurnoId: giocatoriConnessi[indiceTurnoGiocata].id
+            prossimoTurnoId: socket.id,
+            giocatori: giocatoriConnessi // Fondamentale per la mappatura dei posti nel client
         });
     });
 
-    // --- LOGICA DI GIOCO (CARTE IN TAVOLA) ---
+    // 4. GIOCATA CARTA
     socket.on('gioca_carta', (dati) => {
-        // Controllo turno
         if (socket.id !== giocatoriConnessi[indiceTurnoGiocata].id) return;
 
-        // Aggiungi carta al tavolo
         carteSulTavolo.push({
             giocatoreId: socket.id,
-            carta: dati.carta // Oggetto {valore, seme, punti, img}
+            carta: dati.carta 
         });
 
-        // Passa il turno al prossimo
+        // Avanza il turno in senso orario
         indiceTurnoGiocata = (indiceTurnoGiocata + 1) % giocatoriConnessi.length;
 
-        // Comunica a tutti la carta giocata
         io.emit('aggiorna_tavolo', {
             giocatoreId: socket.id,
             carta: dati.carta,
-            prossimoTurnoId: giocatoriConnessi[indiceTurnoGiocata].id,
-            tavoloConfig: carteSulTavolo
+            prossimoTurnoId: giocatoriConnessi[indiceTurnoGiocata].id
         });
 
-        // Se il tavolo è pieno (5 carte), calcola chi vince la presa
         if (carteSulTavolo.length === 5) {
             setTimeout(() => {
                 risolviPresa();
-            }, 2000); // Aspetta 2 secondi per far vedere le carte
+            }, 2000); 
         }
     });
 
@@ -132,26 +128,50 @@ io.on('connection', (socket) => {
     });
 });
 
-// Funzione per capire chi vince la mano e assegnare punti
+// --- LOGICA DI CALCOLO PRESA ---
 function risolviPresa() {
     if (carteSulTavolo.length < 5) return;
 
-    // Qui andrebbe la logica di calcolo vincitore (Seme dominante / Briscola)
-    // Per ora facciamo una logica semplificata: vince il primo giocatore (da implementare gameLogic.js)
-    let idVincitorePresa = carteSulTavolo[0].giocatoreId; 
-    let puntiTotaliMano = carteSulTavolo.reduce((acc, c) => acc + (c.carta.punti || 0), 0);
+    const semeIniziale = carteSulTavolo[0].carta.seme;
+    let vincente = carteSulTavolo[0];
 
+    for (let i = 1; i < carteSulTavolo.length; i++) {
+        const sfidante = carteSulTavolo[i];
+        
+        // Se lo sfidante gioca briscola e il vincente attuale no -> vince lo sfidante
+        if (sfidante.carta.seme === briscolaCorrente && vincente.carta.seme !== briscolaCorrente) {
+            vincente = sfidante;
+        } 
+        // Se entrambi sono briscola o entrambi sono seme iniziale -> vince il valore più alto
+        else if (sfidante.carta.seme === vincente.carta.seme) {
+            if (confrontaCarte(sfidante.carta.valore, vincente.carta.valore)) {
+                vincente = sfidante;
+            }
+        }
+    }
+
+    const idVincitorePresa = vincente.giocatoreId;
+    const puntiTotaliMano = carteSulTavolo.reduce((acc, c) => acc + (c.carta.punti || 0), 0);
+
+    // Assegna i punti
     puntiGiocatori[idVincitorePresa] += puntiTotaliMano;
 
-    // Nuovo turno: chi vince la presa inizia la prossima mano
+    // Chi vince la mano inizia la prossima: aggiorniamo l'indice del turno
     indiceTurnoGiocata = giocatoriConnessi.findIndex(g => g.id === idVincitorePresa);
-    carteSulTavolo = [];
-
+    
     io.emit('fine_mano', {
         vincitoreId: idVincitorePresa,
         puntiAggiornati: puntiGiocatori,
-        prossimoTurnoId: idVincitorePresa
+        prossimoTurnoId: idVincitorePresa 
     });
+
+    carteSulTavolo = [];
+}
+
+function confrontaCarte(val1, val2) {
+    // Gerarchia Briscola: Asso(12), 3(11), Re(10), Cavallo(9), Fante(8), 7, 6, 5, 4, 2
+    const gerarchia = { 1: 12, 3: 11, 10: 10, 9: 9, 8: 8, 7: 7, 6: 6, 5: 5, 4: 4, 2: 3 };
+    return (gerarchia[val1] || 0) > (gerarchia[val2] || 0);
 }
 
 const PORT = process.env.PORT || 3000;

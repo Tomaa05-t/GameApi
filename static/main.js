@@ -1,6 +1,47 @@
-const socket = io(); 
+const socket = io();
 
-// --- 1. ASCOLTO SERVER (Sincronizzazione) ---
+// --- STATO LOCALE DEL GIOCO ---
+let GameState = {
+    fase: 'LOBBY',
+    giocatoriConnessi: 0,
+    mioTurno: false,
+    miaMano: [],
+    briscola: null,
+    cartaChiamata: null
+};
+
+let mappaPosti = {}; 
+const posizioniAvversari = ['ovest', 'nord-ovest', 'nord-est', 'est'];
+let ordineCarteAsta = [1, 3, 10, 9, 8, 7, 6, 5, 4, 2];
+let indiceAttualeAsta = -1;
+
+// --- 1. LOGICA DI MAPPATURA (POSTI A SEDERE) ---
+
+function assegnaPosti(tuttiIGiocatori) {
+    mappaPosti = {};
+    const mioIndice = tuttiIGiocatori.findIndex(g => g.id === socket.id);
+    
+    // Ruotiamo l'array così l'utente corrente è sempre all'indice 0 (SUD)
+    const ruotati = [];
+    for (let i = 0; i < tuttiIGiocatori.length; i++) {
+        ruotati.push(tuttiIGiocatori[(mioIndice + i) % tuttiIGiocatori.length]);
+    }
+
+    // Assegnazione Sud (Tu)
+    mappaPosti[ruotati[0].id] = 'sud';
+    
+    // Assegnazione altri 4 posti
+    for (let i = 1; i < ruotati.length; i++) {
+        const pos = posizioniAvversari[i - 1];
+        mappaPosti[ruotati[i].id] = pos;
+        
+        // Aggiorna Nome nell'HTML
+        const elNome = document.getElementById(`nome-${pos}`);
+        if (elNome) elNome.innerText = ruotati[i].nome;
+    }
+}
+
+// --- 2. ASCOLTO SERVER (SOCKET.IO) ---
 
 socket.on('aggiorna_giocatori', (conteggio) => {
     GameState.giocatoriConnessi = conteggio;
@@ -23,24 +64,21 @@ socket.on('aggiorna_asta', (dati) => {
 socket.on('fine_asta', (dati) => {
     GameState.mioTurno = (socket.id === dati.vincitoreId);
     if (GameState.mioTurno) {
-        const interfacciaAsta = document.getElementById('interfaccia-asta');
-        interfacciaAsta.classList.remove('opacity-50', 'd-none');
-        interfacciaAsta.style.pointerEvents = "auto";
         fineAstaUmano(); 
     } else {
         document.getElementById('interfaccia-asta').classList.add('d-none');
     }
 });
 
-// Inizio partita: riceve chi deve iniziare a giocare
 socket.on('inizio_partita_sincronizzato', (dati) => {
     GameState.fase = 'GIOCANDO';
     GameState.briscola = dati.seme;
     GameState.cartaChiamata = dati.carta;
     GameState.mioTurno = (socket.id === dati.prossimoTurnoId);
 
+    if (dati.giocatori) assegnaPosti(dati.giocatori);
+
     document.getElementById('interfaccia-asta').classList.add('d-none');
-    
     const infoPartita = document.getElementById('info-partita-corso');
     if (infoPartita) {
         infoPartita.classList.remove('d-none');
@@ -50,47 +88,53 @@ socket.on('inizio_partita_sincronizzato', (dati) => {
     renderGame();
 });
 
-// AGGIORNAMENTO TAVOLO: Riceve la carta giocata da qualcuno
 socket.on('aggiorna_tavolo', (dati) => {
     if (dati.giocatoreId !== socket.id) {
         disegnaCartaAlCentro(dati.carta, dati.giocatoreId);
     }
     GameState.mioTurno = (socket.id === dati.prossimoTurnoId);
-    // Opzionale: aggiungi una classe CSS per illuminare il bordo del giocatore di turno
 });
 
-// FINE MANO: Qualcuno ha vinto la presa
 socket.on('fine_mano', (dati) => {
-    // Aggiorna i punti nell'HTML
+    // Aggiornamento Punti Dinamico
     Object.keys(dati.puntiAggiornati).forEach(id => {
-        let spanPunti;
-        if (id === socket.id) spanPunti = document.getElementById('punti-sud');
-        // Qui andrebbe una logica per mappare gli ID socket alle posizioni Est/Ovest/Nord
-        if (spanPunti) spanPunti.innerText = dati.puntiAggiornati[id];
+        const posizione = mappaPosti[id];
+        if (posizione) {
+            const elPunti = document.getElementById(`punti-${posizione}`);
+            if (elPunti) {
+                elPunti.innerText = dati.puntiAggiornati[id];
+                if (id === dati.vincitoreId) {
+                    elPunti.parentElement.classList.add('bg-warning');
+                    elPunti.parentElement.classList.remove('bg-secondary', 'bg-dark');
+                }
+            }
+        }
     });
 
-    // Pulisce il tavolo dopo 2 secondi
+    // Pulizia tavolo
     setTimeout(() => {
         document.getElementById('centro-tavolo').innerHTML = '';
         GameState.mioTurno = (socket.id === dati.prossimoTurnoId);
-    }, 2000);
+        
+        // Reset colori punti
+        document.querySelectorAll('.badge').forEach(b => {
+            if (!b.parentElement.classList.contains('bg-success')) {
+                b.parentElement.classList.remove('bg-warning');
+                b.parentElement.classList.add('bg-dark');
+            }
+        });
+    }, 2500);
 });
 
-// --- 2. LOGICA DI GIOCO ---
+// --- 3. FUNZIONI DI GIOCO ---
 
 function giocaCartaUmano(index) {
-    if (GameState.fase !== 'GIOCANDO' || !GameState.mioTurno) {
-        alert("Non è il tuo turno!");
-        return;
-    }
+    if (GameState.fase !== 'GIOCANDO' || !GameState.mioTurno) return;
 
     const cartaGiocata = GameState.miaMano.splice(index, 1)[0];
-    
-    // Disegna localmente
     disegnaCartaAlCentro(cartaGiocata, socket.id);
     disegnaManoReale(GameState.miaMano);
 
-    // Invia al server
     socket.emit('gioca_carta', { carta: cartaGiocata });
     GameState.mioTurno = false;
 }
@@ -99,27 +143,13 @@ function disegnaCartaAlCentro(carta, giocatoreId) {
     const centro = document.getElementById('centro-tavolo');
     const img = document.createElement('img');
     img.src = carta.img;
-    img.className = 'carta-tavolo'; // Aggiungi stile CSS per posizionarle a raggiera
+    img.className = `carta-tavolo pos-${mappaPosti[giocatoreId]}`;
     img.style.width = "80px";
-    
-    // Semplice posizionamento: se sono io sta sotto, altrimenti sopra
-    if (giocatoreId === socket.id) {
-        img.style.border = "2px solid gold";
-    }
-    
     centro.appendChild(img);
 }
 
-// --- 3. LOGICA ASTA E LOBBY (Invariata) ---
-
-function preparaAttesa() {
-    GameState.fase = 'ATTESA';
-    renderGame();
-    socket.emit('unisciti_partita', prompt("Inserisci il tuo nome:") || "Player");
-}
-
 function avviaPartitaReale(idChiInizia) {
-    indiceAttualeAsta = -1; 
+    // In produzione le carte dovrebbero arrivare dal server, qui manteniamo la tua logica
     const mazzoMischiato = [...mazzo].sort(() => Math.random() - 0.5);
     GameState.miaMano = mazzoMischiato.slice(0, 8);
     GameState.fase = 'ASTA';
@@ -128,38 +158,14 @@ function avviaPartitaReale(idChiInizia) {
     gestisciVisibilitaAsta();
 }
 
-function gestisciVisibilitaAsta() {
-    const interfacciaAsta = document.getElementById('interfaccia-asta');
-    if (!interfacciaAsta) return;
-    interfacciaAsta.classList.toggle('opacity-50', !GameState.mioTurno);
-    interfacciaAsta.style.pointerEvents = GameState.mioTurno ? "auto" : "none";
-}
-
-let ordineCarteAsta = [1, 3, 10, 9, 8, 7, 6, 5, 4, 2];
-let indiceAttualeAsta = -1; 
-
-function fineAstaUmano() {
-    ['btn-chiama', 'btn-passo', 'select-numero'].forEach(id => {
-        document.getElementById(id)?.classList.add('d-none');
-    });
-    document.getElementById('scelta-seme')?.classList.remove('d-none');
-}
-
-// --- 4. RENDER E EVENTI ---
-
 function renderGame() {
-    const areaLobby = document.getElementById('area-lobby');
-    const areaAttesa = document.getElementById('area-attesa');
-    const tavoloGioco = document.getElementById('tavolo-gioco');
-
-    areaLobby.classList.toggle('d-none', GameState.fase !== 'LOBBY');
-    areaAttesa.classList.toggle('d-none', GameState.fase !== 'ATTESA');
-    tavoloGioco.classList.toggle('d-none', !['ASTA', 'GIOCANDO'].includes(GameState.fase));
+    document.getElementById('area-lobby').classList.toggle('d-none', GameState.fase !== 'LOBBY');
+    document.getElementById('area-attesa').classList.toggle('d-none', GameState.fase !== 'ATTESA');
+    document.getElementById('tavolo-gioco').classList.toggle('d-none', !['ASTA', 'GIOCANDO'].includes(GameState.fase));
 
     if (GameState.fase === 'ATTESA') {
         document.getElementById('count-giocatori').innerText = GameState.giocatoriConnessi;
     }
-
     if (GameState.fase === 'ASTA' || GameState.fase === 'GIOCANDO') {
         disegnaManoReale(GameState.miaMano);
         disegnaAvversari();
@@ -185,18 +191,24 @@ function disegnaAvversari() {
         box.innerHTML = '';
         for(let i=0; i<8; i++) {
             const img = document.createElement('img');
-            img.src = 'carte/retro.jpg'; // Assicurati che il percorso sia corretto
-            img.style.width = '40px';
+            img.src = 'carte/retro.jpg';
+            img.style.width = '35px';
             box.appendChild(img);
         }
     });
 }
 
+// --- 4. EVENTI DOM ---
+
 document.addEventListener("DOMContentLoaded", () => {
-    if (!GameState.fase) GameState.fase = 'LOBBY';
     renderGame();
 
-    document.getElementById('btn-crea').onclick = () => preparaAttesa();
+    document.getElementById('btn-crea').onclick = () => {
+        GameState.fase = 'ATTESA';
+        renderGame();
+        const nomeUtente = prompt("Inserisci il tuo nome:") || "Player";
+        socket.emit('unisciti_partita', nomeUtente);
+    };
 
     document.getElementById('btn-chiama').onclick = () => {
         if (!GameState.mioTurno) return;
@@ -210,8 +222,6 @@ document.addEventListener("DOMContentLoaded", () => {
                 valore: select.options[select.selectedIndex].text,
                 indice: indiceScelta 
             });
-        } else {
-            alert("Devi chiamare una carta più bassa!");
         }
     };
 
@@ -225,3 +235,16 @@ document.addEventListener("DOMContentLoaded", () => {
         socket.emit('scelta_briscola', { seme: semeScelto, carta: numeroChiamatoText });
     };
 });
+
+function gestisciVisibilitaAsta() {
+    const asta = document.getElementById('interfaccia-asta');
+    asta.classList.toggle('opacity-50', !GameState.mioTurno);
+    asta.style.pointerEvents = GameState.mioTurno ? "auto" : "none";
+}
+
+function fineAstaUmano() {
+    ['btn-chiama', 'btn-passo', 'select-numero'].forEach(id => {
+        document.getElementById(id)?.classList.add('d-none');
+    });
+    document.getElementById('scelta-seme')?.classList.remove('d-none');
+}
