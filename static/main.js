@@ -77,7 +77,14 @@ socket.on('inizio_partita_sincronizzato', (dati) => {
 
     if (dati.giocatori) assegnaPosti(dati.giocatori);
 
-    document.getElementById('interfaccia-asta')?.classList.add('d-none');
+    // --- AGGIUNGI QUESTE RIGHE ---
+    const asta = document.getElementById('interfaccia-asta');
+    if (asta) {
+        asta.classList.add('d-none'); // Nasconde tutto il blocco asta
+        asta.style.pointerEvents = "none"; // Evita interferenze click
+    }
+    // -----------------------------
+
     const infoPartita = document.getElementById('info-partita-corso');
     if (infoPartita) {
         infoPartita.classList.remove('d-none');
@@ -236,8 +243,22 @@ function gestisciVisibilitaAsta() {
 }
 
 function fineAstaUmano() {
+    // 1. Rendiamo il pannello di nuovo cliccabile e visibile
+    const asta = document.getElementById('interfaccia-asta');
+    if (asta) {
+        asta.classList.remove('opacity-50');
+        asta.style.pointerEvents = "auto";
+    }
+
+    // 2. Nascondiamo i bottoni dell'asta (Chiama/Passo)
     ['btn-chiama', 'btn-passo', 'select-numero'].forEach(id => {
-        document.getElementById(id)?.classList.add('d-none');
+        const el = document.getElementById(id);
+        if (el) el.classList.add('d-none');
     });
-    document.getElementById('scelta-seme')?.classList.remove('d-none');
+
+    // 3. Mostriamo il selettore del seme e il tasto conferma
+    const sceltaSeme = document.getElementById('scelta-seme');
+    if (sceltaSeme) sceltaSeme.classList.remove('d-none');
+    
+    console.log("Asta vinta! Ora scegli il seme.");
 }
