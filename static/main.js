@@ -97,10 +97,18 @@ socket.on('inizio_partita_sincronizzato', (dati) => {
 });
 
 socket.on('aggiorna_tavolo', (dati) => {
+    console.log("Carta giocata da:", dati.giocatoreId, "Prossimo turno:", dati.prossimoTurnoId);
+
+    // Se la carta è stata giocata da un altro, la disegniamo al centro
     if (dati.giocatoreId !== socket.id) {
         disegnaCartaAlCentro(dati.carta, dati.giocatoreId);
     }
+
+    // AGGIORNAMENTO TURNO: Fondamentale
     GameState.mioTurno = (socket.id === dati.prossimoTurnoId);
+
+    // REFRESH VISIVO: Ridisegna la mano per aggiornare la trasparenza
+    disegnaManoReale(GameState.miaMano);
 });
 
 
@@ -149,12 +157,19 @@ socket.on('fine_mano', (dati) => {
 // --- 3. FUNZIONI DI DISEGNO ---
 
 function giocaCartaUmano(index) {
+    // Controllo di sicurezza
     if (GameState.fase !== 'GIOCANDO' || !GameState.mioTurno) return;
+
+    // Rimuovi la carta dalla mano locale
     const cartaGiocata = GameState.miaMano.splice(index, 1)[0];
+
+    // Ottimizzazione visiva immediata:
+    GameState.mioTurno = false; // Togliamo il turno prima di inviare
     disegnaCartaAlCentro(cartaGiocata, socket.id);
-    disegnaManoReale(GameState.miaMano);
+    disegnaManoReale(GameState.miaMano); // Diventeranno trasparenti subito
+
+    // Invia al server
     socket.emit('gioca_carta', { carta: cartaGiocata });
-    GameState.mioTurno = false;
 }
 
 function disegnaCartaAlCentro(carta, giocatoreId) {
