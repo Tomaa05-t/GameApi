@@ -26,7 +26,7 @@ let indiceTurnoAsta = 0;
 
 // Variabili di Gioco
 let briscolaCorrente = null;
-let cartaChiamataCorrente = null; // Sarà il valore (es. "Asso", "3")
+let cartaChiamataCorrente = null; 
 let idChiamante = null;
 let idSocio = null;
 let maniGiocate = 0;
@@ -37,6 +37,7 @@ let puntiGiocatori = {};
 io.on('connection', (socket) => {
     console.log('Giocatore connesso:', socket.id);
 
+    // 1. GESTIONE INGRESSO
     socket.on('unisciti_partita', (nome) => {
         if (giocatoriConnessi.length < 5) {
             if (!giocatoriConnessi.find(g => g.id === socket.id)) {
@@ -49,13 +50,31 @@ io.on('connection', (socket) => {
             io.emit('aggiorna_giocatori', giocatoriConnessi.length);
 
             if (giocatoriConnessi.length === 5) {
-                indiceTurnoAsta = 0;
-                giocatoriInAsta = giocatoriConnessi.map(g => g.id);
-                io.emit('inizia_asta', { prossimoGiocatoreId: giocatoriInAsta[0] });
+                console.log("5 Giocatori raggiunti. Distribuzione mazzo...");
+                const mazzoSincronizzato = creaMazzo();
+                
+                // Distribuzione carte individuale per socket
+                giocatoriConnessi.forEach((g, i) => {
+                    const manoGiocatore = mazzoSincronizzato.slice(i * 8, (i + 1) * 8);
+                    const s = io.sockets.sockets.get(g.id);
+                    if (s) {
+                        s.emit('ricevi_carte', manoGiocatore);
+                    } else {
+                        io.to(g.id).emit('ricevi_carte', manoGiocatore);
+                    }
+                });
+
+                // Inizia l'asta dopo un piccolo delay
+                setTimeout(() => {
+                    indiceTurnoAsta = 0;
+                    giocatoriInAsta = giocatoriConnessi.map(g => g.id);
+                    io.emit('inizia_asta', { prossimoGiocatoreId: giocatoriInAsta[0] });
+                }, 1000);
             }
         }
     });
 
+    // 2. GESTIONE ASTA
     socket.on('mossa_asta', (dati) => {
         if (socket.id !== giocatoriInAsta[indiceTurnoAsta]) return;
 
@@ -81,14 +100,15 @@ io.on('connection', (socket) => {
         }
     });
 
+    // 3. SCELTA BRISCOLA
     socket.on('scelta_briscola', (dati) => {
         idChiamante = socket.id;
         idSocio = null; 
         maniGiocate = 0; 
         briscolaCorrente = dati.seme;
-        // Puliamo il valore della carta chiamata (es. da "Asso di Coppe" a "1")
-        // Assicurati che il client mandi dati.valoreCarta come numero
-        cartaChiamataCorrente = dati.carta; 
+        // Estraggo solo il numero dalla scelta (es. "Asso" -> 1)
+        const mappingValori = {"Asso": 1, "3": 3, "Re": 10, "Cavallo": 9, "Fante": 8, "7": 7, "6": 6, "5": 5, "4": 4, "2": 2};
+        cartaChiamataCorrente = mappingValori[dati.carta] || dati.carta; 
         
         indiceTurnoGiocata = giocatoriConnessi.findIndex(g => g.id === socket.id);
         carteSulTavolo = [];
@@ -101,21 +121,17 @@ io.on('connection', (socket) => {
         });
     });
 
+    // 4. GIOCATA CARTA
     socket.on('gioca_carta', (dati) => {
         if (socket.id !== giocatoriConnessi[indiceTurnoGiocata].id) return;
 
-        // LOGICA SCOPERTA SOCIO
-        // Se la carta giocata ha lo stesso valore di quella chiamata e il seme è la briscola scelta
+        // Scoperta socio
         if (dati.carta.valore == cartaChiamataCorrente && dati.carta.seme == briscolaCorrente) {
             idSocio = socket.id;
-            console.log("Socio identificato:", idSocio);
+            console.log("Socio scoperto!");
         }
 
-        carteSulTavolo.push({
-            giocatoreId: socket.id,
-            carta: dati.carta 
-        });
-
+        carteSulTavolo.push({ giocatoreId: socket.id, carta: dati.carta });
         indiceTurnoGiocata = (indiceTurnoGiocata + 1) % giocatoriConnessi.length;
 
         io.emit('aggiorna_tavolo', {
@@ -132,14 +148,14 @@ io.on('connection', (socket) => {
     socket.on('disconnect', () => {
         giocatoriConnessi = giocatoriConnessi.filter(g => g.id !== socket.id);
         io.emit('aggiorna_giocatori', giocatoriConnessi.length);
-        // Reset partita se qualcuno esce? Opzionale
     });
 });
+
+// --- LOGICA DI GIOCO ---
 
 function risolviPresa() {
     if (carteSulTavolo.length < 5) return;
 
-    const semeIniziale = carteSulTavolo[0].carta.seme;
     let vincente = carteSulTavolo[0];
 
     for (let i = 1; i < carteSulTavolo.length; i++) {
@@ -169,7 +185,6 @@ function risolviPresa() {
 
     carteSulTavolo = [];
 
-    // --- CONTROLLO FINE PARTITA ---
     if (maniGiocate === 8) {
         setTimeout(inviaRisultatiFinali, 1500);
     }
@@ -187,23 +202,9 @@ function inviaRisultatiFinali() {
         socio: nomeSocio,
         puntiChiamanti: puntiChiamanti,
         puntiAltri: puntiAltri,
-        vittoriaChiamanti: puntiChiamanti > 60,
-        classifica: puntiGiocatori
+        vittoriaChiamanti: puntiChiamanti > 60
     });
 }
-
-function confrontaCarte(val1, val2) {
-    const gerarchia = { 1: 12, 3: 11, 10: 10, 9: 9, 8: 8, 7: 7, 6: 6, 5: 5, 4: 4, 2: 3 };
-    return (gerarchia[val1] || 0) > (gerarchia[val2] || 0);
-}
-
-const PORT = process.env.PORT || 3000;
-server.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server online sulla porta ${PORT}`);
-});
-
-
-// Aggiungi queste funzioni in fondo al server.js
 
 function creaMazzo() {
     const semi = ['bastoni', 'spade', 'coppe', 'ori'];
@@ -219,20 +220,20 @@ function creaMazzo() {
             });
         }
     }
-    return mazzo.sort(() => Math.random() - 0.5); // Mischia
+    // Mischia Fisher-Yates (più affidabile di sort)
+    for (let i = mazzo.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [mazzo[i], mazzo[j]] = [mazzo[j], mazzo[i]];
+    }
+    return mazzo;
 }
 
-// Dentro socket.on('unisciti_partita'), quando i giocatori arrivano a 5:
-if (giocatoriConnessi.length === 5) {
-    const mazzoSincronizzato = creaMazzo();
-    
-    // Distribuiamo 8 carte a testa
-    giocatoriConnessi.forEach((g, i) => {
-        const manoGiocatore = mazzoSincronizzato.slice(i * 8, (i + 1) * 8);
-        io.to(g.id).emit('ricevi_carte', manoGiocatore);
-    });
-
-    indiceTurnoAsta = 0;
-    giocatoriInAsta = giocatoriConnessi.map(g => g.id);
-    io.emit('inizia_asta', { prossimoGiocatoreId: giocatoriInAsta[0] });
+function confrontaCarte(val1, val2) {
+    const gerarchia = { 1: 12, 3: 11, 10: 10, 9: 9, 8: 8, 7: 7, 6: 6, 5: 5, 4: 4, 2: 3 };
+    return (gerarchia[val1] || 0) > (gerarchia[val2] || 0);
 }
+
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, "0.0.0.0", () => {
+    console.log(`Server online sulla porta ${PORT}`);
+});
