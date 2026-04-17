@@ -26,15 +26,17 @@ let indiceTurnoAsta = 0;
 
 // Variabili di Gioco
 let briscolaCorrente = null;
-let cartaChiamataCorrente = null;
+let cartaChiamataCorrente = null; // Sarà il valore (es. "Asso", "3")
+let idChiamante = null;
+let idSocio = null;
+let maniGiocate = 0;
 let indiceTurnoGiocata = 0; 
-let carteSulTavolo = [];    
-let puntiGiocatori = {};    
+let carteSulTavolo = [];     
+let puntiGiocatori = {};     
 
 io.on('connection', (socket) => {
     console.log('Giocatore connesso:', socket.id);
 
-    // 1. GESTIONE INGRESSO
     socket.on('unisciti_partita', (nome) => {
         if (giocatoriConnessi.length < 5) {
             if (!giocatoriConnessi.find(g => g.id === socket.id)) {
@@ -54,7 +56,6 @@ io.on('connection', (socket) => {
         }
     });
 
-    // 2. GESTIONE ASTA
     socket.on('mossa_asta', (dati) => {
         if (socket.id !== giocatoriInAsta[indiceTurnoAsta]) return;
 
@@ -80,12 +81,15 @@ io.on('connection', (socket) => {
         }
     });
 
-    // 3. SCELTA BRISCOLA E INIZIO
     socket.on('scelta_briscola', (dati) => {
+        idChiamante = socket.id;
+        idSocio = null; 
+        maniGiocate = 0; 
         briscolaCorrente = dati.seme;
-        cartaChiamataCorrente = dati.carta;
+        // Puliamo il valore della carta chiamata (es. da "Asso di Coppe" a "1")
+        // Assicurati che il client mandi dati.valoreCarta come numero
+        cartaChiamataCorrente = dati.carta; 
         
-        // Il vincitore dell'asta è il primo a giocare
         indiceTurnoGiocata = giocatoriConnessi.findIndex(g => g.id === socket.id);
         carteSulTavolo = [];
 
@@ -93,20 +97,25 @@ io.on('connection', (socket) => {
             seme: dati.seme,
             carta: dati.carta,
             prossimoTurnoId: socket.id,
-            giocatori: giocatoriConnessi // Fondamentale per la mappatura dei posti nel client
+            giocatori: giocatoriConnessi
         });
     });
 
-    // 4. GIOCATA CARTA
     socket.on('gioca_carta', (dati) => {
         if (socket.id !== giocatoriConnessi[indiceTurnoGiocata].id) return;
+
+        // LOGICA SCOPERTA SOCIO
+        // Se la carta giocata ha lo stesso valore di quella chiamata e il seme è la briscola scelta
+        if (dati.carta.valore == cartaChiamataCorrente && dati.carta.seme == briscolaCorrente) {
+            idSocio = socket.id;
+            console.log("Socio identificato:", idSocio);
+        }
 
         carteSulTavolo.push({
             giocatoreId: socket.id,
             carta: dati.carta 
         });
 
-        // Avanza il turno in senso orario
         indiceTurnoGiocata = (indiceTurnoGiocata + 1) % giocatoriConnessi.length;
 
         io.emit('aggiorna_tavolo', {
@@ -116,19 +125,17 @@ io.on('connection', (socket) => {
         });
 
         if (carteSulTavolo.length === 5) {
-            setTimeout(() => {
-                risolviPresa();
-            }, 2000); 
+            setTimeout(risolviPresa, 2000); 
         }
     });
 
     socket.on('disconnect', () => {
         giocatoriConnessi = giocatoriConnessi.filter(g => g.id !== socket.id);
         io.emit('aggiorna_giocatori', giocatoriConnessi.length);
+        // Reset partita se qualcuno esce? Opzionale
     });
 });
 
-// --- LOGICA DI CALCOLO PRESA ---
 function risolviPresa() {
     if (carteSulTavolo.length < 5) return;
 
@@ -137,12 +144,9 @@ function risolviPresa() {
 
     for (let i = 1; i < carteSulTavolo.length; i++) {
         const sfidante = carteSulTavolo[i];
-        
-        // Se lo sfidante gioca briscola e il vincente attuale no -> vince lo sfidante
         if (sfidante.carta.seme === briscolaCorrente && vincente.carta.seme !== briscolaCorrente) {
             vincente = sfidante;
         } 
-        // Se entrambi sono briscola o entrambi sono seme iniziale -> vince il valore più alto
         else if (sfidante.carta.seme === vincente.carta.seme) {
             if (confrontaCarte(sfidante.carta.valore, vincente.carta.valore)) {
                 vincente = sfidante;
@@ -153,11 +157,9 @@ function risolviPresa() {
     const idVincitorePresa = vincente.giocatoreId;
     const puntiTotaliMano = carteSulTavolo.reduce((acc, c) => acc + (c.carta.punti || 0), 0);
 
-    // Assegna i punti
     puntiGiocatori[idVincitorePresa] += puntiTotaliMano;
-
-    // Chi vince la mano inizia la prossima: aggiorniamo l'indice del turno
     indiceTurnoGiocata = giocatoriConnessi.findIndex(g => g.id === idVincitorePresa);
+    maniGiocate++;
     
     io.emit('fine_mano', {
         vincitoreId: idVincitorePresa,
@@ -166,10 +168,31 @@ function risolviPresa() {
     });
 
     carteSulTavolo = [];
+
+    // --- CONTROLLO FINE PARTITA ---
+    if (maniGiocate === 8) {
+        setTimeout(inviaRisultatiFinali, 1500);
+    }
+}
+
+function inviaRisultatiFinali() {
+    const nomeChiamante = giocatoriConnessi.find(g => g.id === idChiamante)?.nome || "Ignoto";
+    const nomeSocio = giocatoriConnessi.find(g => g.id === idSocio)?.nome || "Non uscito";
+    
+    const puntiChiamanti = puntiGiocatori[idChiamante] + (idSocio && idSocio !== idChiamante ? puntiGiocatori[idSocio] : 0);
+    const puntiAltri = 120 - puntiChiamanti;
+
+    io.emit('partita_finita', {
+        chiamante: nomeChiamante,
+        socio: nomeSocio,
+        puntiChiamanti: puntiChiamanti,
+        puntiAltri: puntiAltri,
+        vittoriaChiamanti: puntiChiamanti > 60,
+        classifica: puntiGiocatori
+    });
 }
 
 function confrontaCarte(val1, val2) {
-    // Gerarchia Briscola: Asso(12), 3(11), Re(10), Cavallo(9), Fante(8), 7, 6, 5, 4, 2
     const gerarchia = { 1: 12, 3: 11, 10: 10, 9: 9, 8: 8, 7: 7, 6: 6, 5: 5, 4: 4, 2: 3 };
     return (gerarchia[val1] || 0) > (gerarchia[val2] || 0);
 }

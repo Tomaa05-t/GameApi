@@ -319,3 +319,26 @@ function fineAstaUmano() {
     
     console.log("Asta vinta! Ora scegli il seme.");
 }
+
+
+socket.on('partita_finita', (dati) => {
+    const schermata = document.getElementById('schermata-finale');
+    const titolo = document.getElementById('titolo-vittoria');
+    const nomiChiamanti = document.getElementById('nomi-chiamanti');
+    const puntiChiamanti = document.getElementById('punti-chiamanti-finale');
+    const puntiAltri = document.getElementById('punti-altri-finale');
+
+    nomiChiamanti.innerText = `${dati.chiamante} + ${dati.socio}`;
+    puntiChiamanti.innerText = `${dati.puntiChiamanti} Punti`;
+    puntiAltri.innerText = `${dati.puntiAltri} Punti`;
+
+    if (dati.vittoriaChiamanti) {
+        titolo.innerText = "IL CHIAMANTE VINCE!";
+        titolo.className = "display-4 text-success";
+    } else {
+        titolo.innerText = "GLI ALTRI VINCONO!";
+        titolo.className = "display-4 text-danger";
+    }
+
+    schermata.classList.remove('d-none');
+});
