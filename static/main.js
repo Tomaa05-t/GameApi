@@ -1,6 +1,4 @@
 // --- 0. INIZIALIZZAZIONE SICURA ---
-// Usiamo window.GameState per evitare l'errore "already declared" 
-// nel caso il file venga caricato due volte o ci siano conflitti.
 window.GameState = window.GameState || {
     fase: 'LOBBY',
     giocatoriConnessi: 0,
@@ -16,34 +14,38 @@ const posizioniAvversari = ['ovest', 'nord-ovest', 'nord-est', 'est'];
 let ordineCarteAsta = [1, 3, 10, 9, 8, 7, 6, 5, 4, 2];
 let indiceAttualeAsta = -1;
 
-// --- 1. LOGICA DI MAPPATURA (POSTI A SEDERE) ---
-
+// --- 1. LOGICA DI MAPPATURA ---
 function assegnaPosti(tuttiIGiocatori) {
     mappaPosti = {};
     const mioIndice = tuttiIGiocatori.findIndex(g => g.id === socket.id);
-    
-    // Ruotiamo l'array così l'utente corrente è sempre a SUD
     const ruotati = [];
     for (let i = 0; i < tuttiIGiocatori.length; i++) {
         ruotati.push(tuttiIGiocatori[(mioIndice + i) % tuttiIGiocatori.length]);
     }
-
     mappaPosti[ruotati[0].id] = 'sud';
-    
     for (let i = 1; i < ruotati.length; i++) {
         const pos = posizioniAvversari[i - 1];
         mappaPosti[ruotati[i].id] = pos;
-        
         const elNome = document.getElementById(`nome-${pos}`);
         if (elNome) elNome.innerText = ruotati[i].nome;
     }
 }
 
-// --- 2. ASCOLTO SERVER (SOCKET.IO) ---
+// --- 2. ASCOLTO SERVER ---
 
 socket.on('aggiorna_giocatori', (conteggio) => {
     GameState.giocatoriConnessi = conteggio;
     renderGame();
+});
+
+// RICEZIONE CARTE DAL SERVER (Fondamentale)
+socket.on('ricevi_carte', (mano) => {
+    GameState.miaMano = mano;
+    console.log("Carte ricevute dal server:", mano);
+    // Se siamo già in fase ASTA o GIOCANDO, disegnale subito
+    if (GameState.fase !== 'LOBBY' && GameState.fase !== 'ATTESA') {
+        disegnaManoReale(GameState.miaMano);
+    }
 });
 
 socket.on('inizia_asta', (dati) => {
@@ -77,13 +79,11 @@ socket.on('inizio_partita_sincronizzato', (dati) => {
 
     if (dati.giocatori) assegnaPosti(dati.giocatori);
 
-    // --- AGGIUNGI QUESTE RIGHE ---
     const asta = document.getElementById('interfaccia-asta');
     if (asta) {
-        asta.classList.add('d-none'); // Nasconde tutto il blocco asta
-        asta.style.pointerEvents = "none"; // Evita interferenze click
+        asta.classList.add('d-none');
+        asta.style.pointerEvents = "none";
     }
-    // -----------------------------
 
     const infoPartita = document.getElementById('info-partita-corso');
     if (infoPartita) {
@@ -92,83 +92,50 @@ socket.on('inizio_partita_sincronizzato', (dati) => {
         document.getElementById('visualizza-briscola').innerText = dati.seme.toUpperCase();
     }
     renderGame();
-
-    disegnaManoReale(GameState.miaMano);
 });
 
 socket.on('aggiorna_tavolo', (dati) => {
-    console.log("Carta giocata da:", dati.giocatoreId, "Prossimo turno:", dati.prossimoTurnoId);
-
-    // Se la carta è stata giocata da un altro, la disegniamo al centro
     if (dati.giocatoreId !== socket.id) {
         disegnaCartaAlCentro(dati.carta, dati.giocatoreId);
     }
-
-    // AGGIORNAMENTO TURNO: Fondamentale
     GameState.mioTurno = (socket.id === dati.prossimoTurnoId);
-
-    // REFRESH VISIVO: Ridisegna la mano per aggiornare la trasparenza
-    disegnaManoReale(GameState.miaMano);
+    disegnaManoReale(GameState.miaMano); // Aggiorna trasparenza
 });
 
-
 socket.on('fine_mano', (dati) => {
-    // 1. Aggiornamento Punti e Feedback Visivo
+    // Aggiorna punti
     Object.keys(dati.puntiAggiornati).forEach(id => {
         const posizione = mappaPosti[id];
         if (posizione) {
             const elPunti = document.getElementById(`punti-${posizione}`);
             const contenitorePunti = elPunti?.parentElement;
-
             if (elPunti) {
-                // Aggiorna il numero dei punti
                 elPunti.innerText = dati.puntiAggiornati[id];
-
-                // Gestione evidenziatore (colore giallo/warning)
                 if (id === dati.vincitoreId) {
-                    // Chi vince la mano si illumina
-                    contenitorePunti.classList.remove('bg-dark', 'bg-secondary');
                     contenitorePunti.classList.add('bg-warning', 'text-dark');
                 } else {
-                    // Gli altri tornano allo stile scuro standard
                     contenitorePunti.classList.remove('bg-warning', 'text-dark');
-                    contenitorePunti.classList.add('bg-dark');
                 }
             }
         }
     });
 
-    // 2. Pulizia Tavolo e Sincronizzazione Turno
     setTimeout(() => {
-        // Svuota il centro del tavolo
         const centro = document.getElementById('centro-tavolo');
         if (centro) centro.innerHTML = '';
-
-        // Aggiorna lo stato del turno locale con i dati del server
         GameState.mioTurno = (socket.id === dati.prossimoTurnoId);
-
-        // Ridisegna la mano per applicare/rimuovere la trasparenza
         disegnaManoReale(GameState.miaMano);
-
-        console.log("Nuova mano iniziata. Turno di:", dati.prossimoTurnoId);
-    }, 2500); // Aspettiamo 2.5 secondi per far vedere chi ha vinto la presa
+    }, 2500);
 });
 
 // --- 3. FUNZIONI DI DISEGNO ---
 
 function giocaCartaUmano(index) {
-    // Controllo di sicurezza
     if (GameState.fase !== 'GIOCANDO' || !GameState.mioTurno) return;
-
-    // Rimuovi la carta dalla mano locale
     const cartaGiocata = GameState.miaMano.splice(index, 1)[0];
-
-    // Ottimizzazione visiva immediata:
-    GameState.mioTurno = false; // Togliamo il turno prima di inviare
+    GameState.mioTurno = false;
     disegnaCartaAlCentro(cartaGiocata, socket.id);
-    disegnaManoReale(GameState.miaMano); // Diventeranno trasparenti subito
-
-    // Invia al server
+    disegnaManoReale(GameState.miaMano);
     socket.emit('gioca_carta', { carta: cartaGiocata });
 }
 
@@ -182,15 +149,7 @@ function disegnaCartaAlCentro(carta, giocatoreId) {
     centro.appendChild(img);
 }
 
-
-socket.on('ricevi_carte', (mano) => {
-    GameState.miaMano = mano;
-    console.log("Carte ricevute dal server:", mano);
-});
-
-
 function avviaPartitaReale(idChiInizia) {
-    // GameState.miaMano è già stata riempita da 'ricevi_carte'
     GameState.fase = 'ASTA';
     GameState.mioTurno = (socket.id === idChiInizia);
     renderGame();
@@ -206,37 +165,35 @@ function renderGame() {
         const elCount = document.getElementById('count-giocatori');
         if (elCount) elCount.innerText = GameState.giocatoriConnessi;
     }
+    
     if (GameState.fase === 'ASTA' || GameState.fase === 'GIOCANDO') {
         disegnaManoReale(GameState.miaMano);
         disegnaAvversari();
     }
 }
 
-// js/main.js
-
 function disegnaManoReale(carte) {
     const contenitore = document.getElementById('mie-carte');
     if (!contenitore) return;
     contenitore.innerHTML = '';
 
-    // Controlliamo se è il nostro turno (solo durante la fase di gioco reale)
     const èMioTurnoInGioco = (GameState.fase === 'GIOCANDO' && GameState.mioTurno);
 
     carte.forEach((carta, index) => {
         const img = document.createElement('img');
         img.src = carta.img;
         
-        // --- LOGICA TRASPARENZA ---
-        if (èMioTurnoInGioco) {
-            // È il mio turno: carte ben visibili e cliccabili
+        // Durante l'asta le carte sono visibili ma non cliccabili (non si gioca ancora)
+        if (GameState.fase === 'ASTA') {
             img.className = 'carta-mano';
-            img.style.pointerEvents = "auto"; // Abilita i click
+            img.style.pointerEvents = "none";
+        } else if (èMioTurnoInGioco) {
+            img.className = 'carta-mano';
+            img.style.pointerEvents = "auto";
         } else {
-            // Non è il mio turno: carte trasparenti e non cliccabili
-            img.className = 'carta-mano opacity-50'; // Aggiunge classe Bootstrap per trasparenza al 50%
-            img.style.pointerEvents = "none"; // Disabilita i click (sicurezza extra)
+            img.className = 'carta-mano opacity-50';
+            img.style.pointerEvents = "none";
         }
-        // -----------------------------
 
         img.onclick = () => giocaCartaUmano(index);
         contenitore.appendChild(img);
@@ -255,23 +212,18 @@ function disegnaAvversari() {
     });
 }
 
-// --- 4. ATTIVAZIONE EVENTI DOM ---
+// --- 4. ATTIVAZIONE EVENTI ---
 
 document.addEventListener("DOMContentLoaded", () => {
     renderGame();
 
-    // Tasto Nuova Partita
-    const btnCrea = document.getElementById('btn-crea');
-    if (btnCrea) {
-        btnCrea.onclick = () => {
-            GameState.fase = 'ATTESA';
-            renderGame();
-            const nomeUtente = prompt("Inserisci il tuo nome:") || "Player";
-            socket.emit('unisciti_partita', nomeUtente);
-        };
-    }
+    document.getElementById('btn-crea').onclick = () => {
+        const nomeUtente = prompt("Inserisci il tuo nome:") || "Player";
+        GameState.fase = 'ATTESA';
+        renderGame();
+        socket.emit('unisciti_partita', nomeUtente);
+    };
 
-    // Altri bottoni
     document.getElementById('btn-chiama').onclick = () => {
         if (!GameState.mioTurno) return;
         const select = document.getElementById('select-numero');
@@ -305,38 +257,24 @@ function gestisciVisibilitaAsta() {
 }
 
 function fineAstaUmano() {
-    // 1. Rendiamo il pannello di nuovo cliccabile e visibile
     const asta = document.getElementById('interfaccia-asta');
     if (asta) {
         asta.classList.remove('opacity-50');
         asta.style.pointerEvents = "auto";
     }
-
-    // 2. Nascondiamo i bottoni dell'asta (Chiama/Passo)
     ['btn-chiama', 'btn-passo', 'select-numero'].forEach(id => {
-        const el = document.getElementById(id);
-        if (el) el.classList.add('d-none');
+        document.getElementById(id)?.classList.add('d-none');
     });
-
-    // 3. Mostriamo il selettore del seme e il tasto conferma
-    const sceltaSeme = document.getElementById('scelta-seme');
-    if (sceltaSeme) sceltaSeme.classList.remove('d-none');
-    
-    console.log("Asta vinta! Ora scegli il seme.");
+    document.getElementById('scelta-seme')?.classList.remove('d-none');
 }
-
 
 socket.on('partita_finita', (dati) => {
     const schermata = document.getElementById('schermata-finale');
+    document.getElementById('nomi-chiamanti').innerText = `${dati.chiamante} + ${dati.socio}`;
+    document.getElementById('punti-chiamanti-finale').innerText = `${dati.puntiChiamanti} Punti`;
+    document.getElementById('punti-altri-finale').innerText = `${dati.puntiAltri} Punti`;
+
     const titolo = document.getElementById('titolo-vittoria');
-    const nomiChiamanti = document.getElementById('nomi-chiamanti');
-    const puntiChiamanti = document.getElementById('punti-chiamanti-finale');
-    const puntiAltri = document.getElementById('punti-altri-finale');
-
-    nomiChiamanti.innerText = `${dati.chiamante} + ${dati.socio}`;
-    puntiChiamanti.innerText = `${dati.puntiChiamanti} Punti`;
-    puntiAltri.innerText = `${dati.puntiAltri} Punti`;
-
     if (dati.vittoriaChiamanti) {
         titolo.innerText = "IL CHIAMANTE VINCE!";
         titolo.className = "display-4 text-success";
@@ -344,6 +282,5 @@ socket.on('partita_finita', (dati) => {
         titolo.innerText = "GLI ALTRI VINCONO!";
         titolo.className = "display-4 text-danger";
     }
-
     schermata.classList.remove('d-none');
 });
