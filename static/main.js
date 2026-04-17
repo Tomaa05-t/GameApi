@@ -182,10 +182,15 @@ function disegnaCartaAlCentro(carta, giocatoreId) {
     centro.appendChild(img);
 }
 
+
+socket.on('ricevi_carte', (mano) => {
+    GameState.miaMano = mano;
+    console.log("Carte ricevute dal server:", mano);
+});
+
+
 function avviaPartitaReale(idChiInizia) {
-    // Nota: mazzo deve essere definito in cards.js
-    const mazzoMischiato = [...mazzo].sort(() => Math.random() - 0.5);
-    GameState.miaMano = mazzoMischiato.slice(0, 8);
+    // GameState.miaMano è già stata riempita da 'ricevi_carte'
     GameState.fase = 'ASTA';
     GameState.mioTurno = (socket.id === idChiInizia);
     renderGame();

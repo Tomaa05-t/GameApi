@@ -201,3 +201,38 @@ const PORT = process.env.PORT || 3000;
 server.listen(PORT, "0.0.0.0", () => {
     console.log(`Server online sulla porta ${PORT}`);
 });
+
+
+// Aggiungi queste funzioni in fondo al server.js
+
+function creaMazzo() {
+    const semi = ['bastoni', 'spade', 'coppe', 'ori'];
+    const suffix = { 'bastoni': 'bast', 'spade': 'spade', 'coppe': 'coppe', 'ori': 'ori' };
+    let mazzo = [];
+    for (let s of semi) {
+        for (let v = 1; v <= 10; v++) {
+            mazzo.push({
+                seme: s,
+                valore: v,
+                punti: (v === 1 ? 11 : v === 3 ? 10 : v === 10 ? 4 : v === 9 ? 3 : v === 8 ? 2 : 0),
+                img: `carte/${s}/${v}_${suffix[s]}.png`
+            });
+        }
+    }
+    return mazzo.sort(() => Math.random() - 0.5); // Mischia
+}
+
+// Dentro socket.on('unisciti_partita'), quando i giocatori arrivano a 5:
+if (giocatoriConnessi.length === 5) {
+    const mazzoSincronizzato = creaMazzo();
+    
+    // Distribuiamo 8 carte a testa
+    giocatoriConnessi.forEach((g, i) => {
+        const manoGiocatore = mazzoSincronizzato.slice(i * 8, (i + 1) * 8);
+        io.to(g.id).emit('ricevi_carte', manoGiocatore);
+    });
+
+    indiceTurnoAsta = 0;
+    giocatoriInAsta = giocatoriConnessi.map(g => g.id);
+    io.emit('inizia_asta', { prossimoGiocatoreId: giocatoriInAsta[0] });
+}
