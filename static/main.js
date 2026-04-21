@@ -6,7 +6,8 @@ window.GameState = {
     miaMano: [],
     briscola: null,
     cartaChiamata: null,
-    roomID: null
+    roomID: null,
+    nomeUtente: ""
 };
 
 const socket = io();
@@ -27,7 +28,6 @@ function assegnaPosti(tuttiIGiocatori) {
     }
 
     mappaPosti[ruotati[0].id] = 'sud';
-    // Mappiamo gli altri 4 giocatori nelle posizioni restanti
     for (let i = 1; i < ruotati.length; i++) {
         const pos = posizioniAvversari[i - 1];
         mappaPosti[ruotati[i].id] = pos;
@@ -38,24 +38,20 @@ function assegnaPosti(tuttiIGiocatori) {
 
 // --- 2. ASCOLTO EVENTI SERVER ---
 
-// Ricezione lista partite
 socket.on('aggiorna_lista_partite', (partite) => {
     const contenitore = document.getElementById('lista-partite');
     if (!contenitore) return;
-
     if (partite.length === 0) {
-        contenitore.innerHTML = '<div class="list-group-item bg-dark text-muted border-secondary">Nessuna partita attiva. Creane una!</div>';
+        contenitore.innerHTML = '<div class="list-group-item bg-dark text-muted border-secondary text-center">Nessuna partita attiva. Creane una!</div>';
         return;
     }
-
     contenitore.innerHTML = partite.map(p => `
         <div class="list-group-item d-flex justify-content-between align-items-center bg-dark text-white border-secondary">
             <div>
-                <i class="fas fa-user-friends me-2 text-warning"></i>
-                <strong>Partita di ${p.creatore}</strong>
-                <span class="badge bg-secondary ms-2">${p.n}/5</span>
+                <strong>Stanza di ${p.creatore}</strong>
+                <span class="badge bg-warning text-dark ms-2">${p.n}/5</span>
             </div>
-            <button onclick="entraInPartita('${p.id}')" class="btn btn-sm btn-outline-warning">Entra</button>
+            <button onclick="entraInPartita('${p.id}')" class="btn btn-sm btn-warning">Entra</button>
         </div>
     `).join('');
 });
@@ -63,43 +59,58 @@ socket.on('aggiorna_lista_partite', (partite) => {
 socket.on('partita_creata', (roomID) => {
     GameState.roomID = roomID;
     GameState.fase = 'ATTESA';
-
-    // Scrive il nome dell'host nell'area attesa (se hai aggiunto lo span nell'html)
-    const elHost = document.getElementById('nome-host');
-    if (elHost) elHost.innerText = window.GameState.nomeUtente;
-    
     renderGame();
 });
 
 socket.on('aggiorna_giocatori', (conteggio) => {
     GameState.giocatoriConnessi = conteggio;
-    if (GameState.fase === 'ATTESA') renderGame();
+    if (GameState.fase === 'ATTESA') {
+        const elCount = document.getElementById('count-giocatori');
+        if (elCount) elCount.innerText = conteggio;
+    }
 });
 
 socket.on('ricevi_carte', (mano) => {
     GameState.miaMano = mano;
-    console.log("Carte ricevute:", mano);
     disegnaManoReale(GameState.miaMano);
 });
 
+// MODIFICATO: aggiunto prossimoGiocatoreNome
 socket.on('inizia_asta', (dati) => {
     GameState.fase = 'ASTA';
     GameState.mioTurno = (socket.id === dati.prossimoGiocatoreId);
+    
+    const elTurno = document.getElementById('nome-turno');
+    if (elTurno) elTurno.innerText = GameState.mioTurno ? "TOCCA A TE" : dati.prossimoGiocatoreNome;
+    
     renderGame();
     gestisciVisibilitaAsta();
 });
 
+// MODIFICATO: aggiunto prossimoGiocatoreNome
 socket.on('aggiorna_asta', (dati) => {
     if (dati.ultimoValore) {
-        document.getElementById('valore-asta-carta').innerText = dati.ultimoValore;
+        const elValore = document.getElementById('valore-asta-carta');
+        if (elValore) elValore.innerText = dati.ultimoValore;
         indiceAttualeAsta = dati.indice;
     }
+
     GameState.mioTurno = (socket.id === dati.prossimoGiocatoreId);
+    
+    const elTurno = document.getElementById('nome-turno');
+    if (elTurno) {
+        elTurno.innerText = GameState.mioTurno ? "TOCCA A TE!" : dati.prossimoGiocatoreNome;
+        GameState.mioTurno ? elTurno.classList.add('text-warning') : elTurno.classList.remove('text-warning');
+    }
+
     gestisciVisibilitaAsta();
 });
 
 socket.on('fine_asta', (dati) => {
     GameState.mioTurno = (socket.id === dati.vincitoreId);
+    const elTurno = document.getElementById('nome-turno');
+    if (elTurno) elTurno.innerText = "ATTESA SCELTA BRISCOLA...";
+
     if (GameState.mioTurno) {
         preparaSceltaBriscola(); 
     } else {
@@ -107,6 +118,7 @@ socket.on('fine_asta', (dati) => {
     }
 });
 
+// MODIFICATO: aggiunto prossimoTurnoNome
 socket.on('inizio_partita_sincronizzato', (dati) => {
     GameState.fase = 'GIOCANDO';
     GameState.briscola = dati.seme;
@@ -115,24 +127,30 @@ socket.on('inizio_partita_sincronizzato', (dati) => {
 
     assegnaPosti(dati.giocatori);
     
-    // Aggiorna UI
     document.getElementById('interfaccia-asta').classList.add('d-none');
     document.getElementById('visualizza-numero-chiamato').innerText = dati.carta;
     document.getElementById('visualizza-briscola').innerText = dati.seme.toUpperCase();
     
+    const elTurno = document.getElementById('nome-turno');
+    if (elTurno) elTurno.innerText = GameState.mioTurno ? "TOCCA A TE" : dati.prossimoTurnoNome;
+
     renderGame();
 });
 
+// MODIFICATO: aggiunto prossimoTurnoNome
 socket.on('aggiorna_tavolo', (dati) => {
     if (dati.giocatoreId !== socket.id) {
         disegnaCartaAlCentro(dati.carta, dati.giocatoreId);
     }
     GameState.mioTurno = (socket.id === dati.prossimoTurnoId);
+    
+    const elTurno = document.getElementById('nome-turno');
+    if (elTurno) elTurno.innerText = GameState.mioTurno ? "TOCCA A TE" : dati.prossimoTurnoNome;
+    
     disegnaManoReale(GameState.miaMano);
 });
 
 socket.on('fine_mano', (dati) => {
-    // Aggiorna punteggi visibili
     Object.keys(dati.puntiAggiornati).forEach(id => {
         const pos = mappaPosti[id];
         const el = document.getElementById(`punti-${pos}`);
@@ -142,6 +160,10 @@ socket.on('fine_mano', (dati) => {
     setTimeout(() => {
         document.getElementById('centro-tavolo').innerHTML = '';
         GameState.mioTurno = (socket.id === dati.prossimoTurnoId);
+        
+        const elTurno = document.getElementById('nome-turno');
+        if (elTurno) elTurno.innerText = GameState.mioTurno ? "TOCCA A TE" : dati.prossimoTurnoNome;
+        
         disegnaManoReale(GameState.miaMano);
     }, 2000);
 });
@@ -150,6 +172,7 @@ socket.on('fine_mano', (dati) => {
 
 function entraInPartita(id) {
     const nome = prompt("Il tuo nome:") || "Player";
+    GameState.nomeUtente = nome;
     GameState.roomID = id;
     GameState.fase = 'ATTESA';
     renderGame();
@@ -170,7 +193,7 @@ function disegnaCartaAlCentro(carta, giocatoreId) {
     const img = document.createElement('img');
     img.src = carta.img;
     img.className = 'carta-tavolo';
-    img.style.transform = `rotate(${Math.random() * 10 - 5}deg)`;
+    img.style.transform = `rotate(${Math.random() * 20 - 10}deg)`;
     centro.appendChild(img);
 }
 
@@ -182,10 +205,6 @@ function renderGame() {
     if (GameState.fase === 'ATTESA') {
         document.getElementById('count-giocatori').innerText = GameState.giocatoriConnessi;
     }
-    if (GameState.fase === 'ASTA' || GameState.fase === 'GIOCANDO') {
-        disegnaManoReale(GameState.miaMano);
-        disegnaMazzettiAvversari();
-    }
 }
 
 function disegnaManoReale(carte) {
@@ -195,20 +214,17 @@ function disegnaManoReale(carte) {
     carte.forEach((c, i) => {
         const img = document.createElement('img');
         img.src = c.img;
-        img.className = (GameState.fase === 'GIOCANDO' && GameState.mioTurno) ? 'carta-mano' : 'carta-mano opacity-75';
-        img.onclick = () => giocaCartaUmano(i);
+        // La carta è cliccabile solo se è il mio turno e non siamo in asta
+        const puoGiocare = GameState.fase === 'GIOCANDO' && GameState.mioTurno;
+        img.className = puoGiocare ? 'carta-mano' : 'carta-mano opaca';
+        img.onclick = () => { if(puoGiocare) giocaCartaUmano(i); };
         box.appendChild(img);
-    });
-}
-
-function disegnaMazzettiAvversari() {
-    document.querySelectorAll('.mazzetto-coperto').forEach(m => {
-        m.innerHTML = '<i class="fas fa-layer-group fa-2x text-white-50"></i>';
     });
 }
 
 function gestisciVisibilitaAsta() {
     const container = document.getElementById('interfaccia-asta');
+    if (!container) return;
     if (GameState.fase === 'ASTA') {
         container.classList.remove('d-none');
         container.style.opacity = GameState.mioTurno ? "1" : "0.5";
@@ -221,13 +237,16 @@ function preparaSceltaBriscola() {
     document.getElementById('btn-passo').classList.add('d-none');
     document.getElementById('select-numero').classList.add('d-none');
     document.getElementById('scelta-seme').classList.remove('d-none');
+    
+    const elTurno = document.getElementById('nome-turno');
+    if (elTurno) elTurno.innerText = "SCEGLI LA BRISCOLA!";
 }
 
 // --- 4. EVENTI DOM ---
 
 document.addEventListener("DOMContentLoaded", () => {
     document.getElementById('btn-crea').onclick = () => {
-        const nome = prompt("Nome della stanza (tuo nome):") || "Player";
+        const nome = prompt("Inserisci il tuo nome:") || "Player";
         window.GameState.nomeUtente = nome;
         socket.emit('crea_partita', nome);
     };
@@ -239,13 +258,12 @@ document.addEventListener("DOMContentLoaded", () => {
             const testo = document.getElementById('select-numero').options[document.getElementById('select-numero').selectedIndex].text;
             socket.emit('mossa_asta', { tipo: 'CHIAMATA', valore: testo, indice: idx });
         } else {
-            alert("Devi chiamare una carta più bassa (es. se è Asso, devi chiamare 3 o meno)");
+            alert("Devi chiamare una carta più bassa nella gerarchia (Asso > 3 > Re...)");
         }
     };
 
     document.getElementById('btn-passo').onclick = () => socket.emit('mossa_asta', { tipo: 'PASSO' });
 
-    // Gestione bottoni semi
     document.querySelectorAll('.btn-seme').forEach(btn => {
         btn.onclick = () => {
             const seme = btn.getAttribute('data-seme');
@@ -257,9 +275,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
 socket.on('partita_finita', (dati) => {
     const win = document.getElementById('schermata-finale');
-    document.getElementById('titolo-vittoria').innerText = dati.vittoriaChiamanti ? "I CHIAMANTI VINCONO!" : "GLI ALTRI VINCONO!";
-    document.getElementById('nomi-chiamanti').innerText = `${dati.chiamante} & ${dati.socio}`;
+    document.getElementById('titolo-vittoria').innerText = dati.vittoriaChiamanti ? "I CHIAMANTI VINCONO!" : "GLI AVVERSARI VINCONO!";
+    document.getElementById('nomi-chiamanti').innerText = dati.chiamante;
     document.getElementById('punti-chiamanti-finale').innerText = dati.puntiChiamanti;
     document.getElementById('punti-altri-finale').innerText = dati.puntiAltri;
     win.classList.remove('d-none');
+    win.classList.add('d-flex');
 });

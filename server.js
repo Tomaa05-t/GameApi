@@ -19,20 +19,20 @@ app.get('/', (req, res) => {
 const server = createServer(app);
 const io = new Server(server, { cors: { origin: "*" } });
 
-// --- GESTIONE MULTI-PARTITA ---
-let partite = {}; // Struttura: { roomID: { statoPartita } }
+// --- DATABASE TEMPORANEO ---
+let partite = {}; 
 
 io.on('connection', (socket) => {
     console.log('Connesso:', socket.id);
 
     // Invia la lista delle partite disponibili al nuovo connesso
-    inviaListaPartite(socket);
+    socket.emit('aggiorna_lista_partite', ottieniListaLobby());
 
     // 1. CREAZIONE PARTITA
     socket.on('crea_partita', (nomeCreatore) => {
         const numeroPartite = Object.keys(partite).length;
-        if (numeroPartite >= 3) {
-            return socket.emit('errore', 'Limite massimo di 3 partite raggiunto.');
+        if (numeroPartite >= 5) { // Alzato il limite a 5
+            return socket.emit('errore', 'Troppe partite attive nel server.');
         }
 
         const roomID = `room_${Date.now()}`;
@@ -54,7 +54,7 @@ io.on('connection', (socket) => {
         };
 
         socket.join(roomID);
-        socket.roomID = roomID; // Memorizziamo la stanza nel socket
+        socket.roomID = roomID;
         
         socket.emit('partita_creata', roomID);
         io.emit('aggiorna_lista_partite', ottieniListaLobby());
@@ -80,10 +80,14 @@ io.on('connection', (socket) => {
         }
     });
 
-    // 3. LOGICA ASTA
+    // 3. LOGICA ASTA (Sincronizzata con Nomi)
     socket.on('mossa_asta', (dati) => {
         const p = partite[socket.roomID];
-        if (!p || socket.id !== p.giocatoriInAsta[p.indiceTurnoAsta]) return;
+        if (!p) return;
+
+        // Verifica turno
+        const idCorrente = p.giocatoriInAsta[p.indiceTurnoAsta];
+        if (socket.id !== idCorrente) return;
 
         if (dati.tipo === 'PASSO') {
             p.giocatoriInAsta.splice(p.indiceTurnoAsta, 1);
@@ -94,20 +98,26 @@ io.on('connection', (socket) => {
 
         if (p.giocatoriInAsta.length === 1) {
             const vincitoreId = p.giocatoriInAsta[0];
+            const vincitore = p.giocatori.find(g => g.id === vincitoreId);
+            
             io.to(p.id).emit('fine_asta', { 
                 vincitoreId: vincitoreId, 
-                vincitoreNome: p.giocatori.find(g => g.id === vincitoreId).nome 
+                vincitoreNome: vincitore ? vincitore.nome : "Sconosciuto" 
             });
         } else {
+            const prossimoId = p.giocatoriInAsta[p.indiceTurnoAsta];
+            const prossimoNome = p.giocatori.find(g => g.id === prossimoId).nome;
+
             io.to(p.id).emit('aggiorna_asta', {
                 ultimoValore: dati.valore,
                 indice: dati.indice,
-                prossimoGiocatoreId: p.giocatoriInAsta[p.indiceTurnoAsta]
+                prossimoGiocatoreId: prossimoId,
+                prossimoGiocatoreNome: prossimoNome
             });
         }
     });
 
-    // 4. SCELTA BRISCOLA E INIZIO GIOCO
+    // 4. SCELTA BRISCOLA
     socket.on('scelta_briscola', (dati) => {
         const p = partite[socket.roomID];
         if (!p) return;
@@ -115,14 +125,17 @@ io.on('connection', (socket) => {
         p.stato = 'GIOCANDO';
         p.idChiamante = socket.id;
         p.briscolaCorrente = dati.seme;
+        
         const mapping = {"Asso": 1, "3": 3, "Re": 10, "Cavallo": 9, "Fante": 8, "7": 7, "6": 6, "5": 5, "4": 4, "2": 2};
         p.cartaChiamataCorrente = mapping[dati.carta] || dati.carta;
+        
         p.indiceTurnoGiocata = p.giocatori.findIndex(g => g.id === socket.id);
 
         io.to(p.id).emit('inizio_partita_sincronizzato', {
             seme: dati.seme,
             carta: dati.carta,
             prossimoTurnoId: socket.id,
+            prossimoTurnoNome: p.giocatori[p.indiceTurnoGiocata].nome,
             giocatori: p.giocatori
         });
     });
@@ -132,8 +145,10 @@ io.on('connection', (socket) => {
         const p = partite[socket.roomID];
         if (!p || socket.id !== p.giocatori[p.indiceTurnoGiocata].id) return;
 
+        // Controllo Socio (quando viene giocata la carta chiamata)
         if (dati.carta.valore == p.cartaChiamataCorrente && dati.carta.seme == p.briscolaCorrente) {
             p.idSocio = socket.id;
+            console.log("Il socio è stato trovato:", socket.id);
         }
 
         p.carteSulTavolo.push({ giocatoreId: socket.id, carta: dati.carta });
@@ -142,11 +157,12 @@ io.on('connection', (socket) => {
         io.to(p.id).emit('aggiorna_tavolo', {
             giocatoreId: socket.id,
             carta: dati.carta,
-            prossimoTurnoId: p.giocatori[p.indiceTurnoGiocata].id
+            prossimoTurnoId: p.giocatori[p.indiceTurnoGiocata].id,
+            prossimoTurnoNome: p.giocatori[p.indiceTurnoGiocata].nome
         });
 
         if (p.carteSulTavolo.length === 5) {
-            setTimeout(() => risolviPresa(p.id), 2000);
+            setTimeout(() => risolviPresa(p.id), 1500);
         }
     });
 
@@ -164,20 +180,12 @@ io.on('connection', (socket) => {
     });
 });
 
-// --- FUNZIONI DI SUPPORTO ---
+// --- FUNZIONI UTILI ---
 
 function ottieniListaLobby() {
     return Object.values(partite)
         .filter(p => p.stato === 'LOBBY')
-        .map(p => ({ 
-            id: p.id, 
-            creatore: p.creatore, // Deve corrispondere a quello sopra
-            n: p.giocatori.length 
-        }));
-}
-
-function inviaListaPartite(socket) {
-    socket.emit('aggiorna_lista_partite', ottieniListaLobby());
+        .map(p => ({ id: p.id, creatore: p.creatore, n: p.giocatori.length }));
 }
 
 function avviaPartitaReale(roomID) {
@@ -185,15 +193,23 @@ function avviaPartitaReale(roomID) {
     p.stato = 'ASTA';
     const mazzo = creaMazzo();
     
+    // Distribuzione carte
     p.giocatori.forEach((g, i) => {
         const mano = mazzo.slice(i * 8, (i + 1) * 8);
         io.to(g.id).emit('ricevi_carte', mano);
     });
 
+    // Avvio Asta
     setTimeout(() => {
         p.giocatoriInAsta = p.giocatori.map(g => g.id);
-        io.to(roomID).emit('inizia_asta', { prossimoGiocatoreId: p.giocatoriInAsta[0] });
-    }, 1000);
+        const primoId = p.giocatoriInAsta[0];
+        const primoNome = p.giocatori.find(g => g.id === primoId).nome;
+        
+        io.to(roomID).emit('inizia_asta', { 
+            prossimoGiocatoreId: primoId,
+            prossimoGiocatoreNome: primoNome 
+        });
+    }, 1500);
 }
 
 function risolviPresa(roomID) {
@@ -201,12 +217,19 @@ function risolviPresa(roomID) {
     if (!p) return;
 
     let vincente = p.carteSulTavolo[0];
+    const semeBase = vincente.carta.seme;
+
     for (let i = 1; i < p.carteSulTavolo.length; i++) {
         const sfidante = p.carteSulTavolo[i];
+        // Se lo sfidante gioca briscola e il vincente no
         if (sfidante.carta.seme === p.briscolaCorrente && vincente.carta.seme !== p.briscolaCorrente) {
             vincente = sfidante;
-        } else if (sfidante.carta.seme === vincente.carta.seme) {
-            if (confrontaCarte(sfidante.carta.valore, vincente.carta.valore)) vincente = sfidante;
+        } 
+        // Se giocano entrambi lo stesso seme (briscola o seme di mano)
+        else if (sfidante.carta.seme === vincente.carta.seme) {
+            if (confrontaCarte(sfidante.carta.valore, vincente.carta.valore)) {
+                vincente = sfidante;
+            }
         }
     }
 
@@ -218,25 +241,33 @@ function risolviPresa(roomID) {
     io.to(roomID).emit('fine_mano', {
         vincitoreId: vincente.giocatoreId,
         puntiAggiornati: p.puntiGiocatori,
-        prossimoTurnoId: vincente.giocatoreId
+        prossimoTurnoId: vincente.giocatoreId,
+        prossimoTurnoNome: p.giocatori[p.indiceTurnoGiocata].nome
     });
 
     p.carteSulTavolo = [];
-    if (p.maniGiocate === 8) inviaRisultatiFinali(roomID);
+    if (p.maniGiocate === 8) {
+        setTimeout(() => inviaRisultatiFinali(roomID), 2000);
+    }
 }
 
 function inviaRisultatiFinali(roomID) {
     const p = partite[roomID];
+    if (!p) return;
+
     const puntiChiamanti = p.puntiGiocatori[p.idChiamante] + (p.idSocio && p.idSocio !== p.idChiamante ? p.puntiGiocatori[p.idSocio] : 0);
-    
+    const nomiChiamanti = p.giocatori.find(g => g.id === p.idChiamante)?.nome + 
+                          (p.idSocio && p.idSocio !== p.idChiamante ? " e " + p.giocatori.find(g => g.id === p.idSocio)?.nome : "");
+
     io.to(roomID).emit('partita_finita', {
-        chiamante: p.giocatori.find(g => g.id === p.idChiamante)?.nome,
-        socio: p.giocatori.find(g => g.id === p.idSocio)?.nome || "Non uscito",
+        chiamante: nomiChiamanti,
+        socio: p.idSocio ? p.giocatori.find(g => g.id === p.idSocio)?.nome : "Nessuno",
         puntiChiamanti,
         puntiAltri: 120 - puntiChiamanti,
         vittoriaChiamanti: puntiChiamanti > 60
     });
-    delete partite[roomID]; // Pulizia post-partita
+
+    delete partite[roomID];
     io.emit('aggiorna_lista_partite', ottieniListaLobby());
 }
 
@@ -253,16 +284,12 @@ function creaMazzo() {
             });
         }
     }
-    for (let i = mazzo.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [mazzo[i], mazzo[j]] = [mazzo[j], mazzo[i]];
-    }
-    return mazzo;
+    return mazzo.sort(() => Math.random() - 0.5);
 }
 
 function confrontaCarte(val1, val2) {
-    const g = { 1: 12, 3: 11, 10: 10, 9: 9, 8: 8, 7: 7, 6: 6, 5: 5, 4: 4, 2: 3 };
-    return (g[val1] || 0) > (g[val2] || 0);
+    const gerarchia = { 1: 12, 3: 11, 10: 10, 9: 9, 8: 8, 7: 7, 6: 6, 5: 5, 4: 4, 2: 3 };
+    return (gerarchia[val1] || 0) > (gerarchia[val2] || 0);
 }
 
 const PORT = process.env.PORT || 3000;
