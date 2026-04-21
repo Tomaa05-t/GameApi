@@ -118,27 +118,28 @@ io.on('connection', (socket) => {
     });
 
     // 4. SCELTA BRISCOLA
-    socket.on('scelta_briscola', (dati) => {
-        const p = partite[socket.roomID];
-        if (!p) return;
+// Cerca questa parte nel server.js
+socket.on('scelta_briscola', (dati) => {
+    const p = partite[socket.roomID];
+    if (!p) return;
 
-        p.stato = 'GIOCANDO';
-        p.idChiamante = socket.id;
-        p.briscolaCorrente = dati.seme;
-        
-        const mapping = {"Asso": 1, "3": 3, "Re": 10, "Cavallo": 9, "Fante": 8, "7": 7, "6": 6, "5": 5, "4": 4, "2": 2};
-        p.cartaChiamataCorrente = mapping[dati.carta] || dati.carta;
-        
-        p.indiceTurnoGiocata = p.giocatori.findIndex(g => g.id === socket.id);
+    p.stato = 'GIOCANDO'; // Cambia lo stato sul server
+    p.idChiamante = socket.id;
+    p.briscolaCorrente = dati.seme;
+    p.cartaChiamataCorrente = dati.carta;
+    
+    // Il primo a giocare è chi ha chiamato (il vincitore dell'asta)
+    p.indiceTurnoGiocata = p.giocatori.findIndex(g => g.id === socket.id);
 
-        io.to(p.id).emit('inizio_partita_sincronizzato', {
-            seme: dati.seme,
-            carta: dati.carta,
-            prossimoTurnoId: socket.id,
-            prossimoTurnoNome: p.giocatori[p.indiceTurnoGiocata].nome,
-            giocatori: p.giocatori
-        });
+    // IMPORTANTE: Usa io.to(p.id) per svegliare tutti i giocatori!
+    io.to(p.id).emit('inizio_partita_sincronizzato', {
+        seme: p.briscolaCorrente,
+        carta: p.cartaChiamataCorrente,
+        prossimoTurnoId: socket.id,
+        prossimoTurnoNome: p.giocatori[p.indiceTurnoGiocata].nome,
+        giocatori: p.giocatori // Invia la lista per mappare i posti
     });
+});
 
     // 5. GIOCATA CARTA
     socket.on('gioca_carta', (dati) => {

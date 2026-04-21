@@ -123,13 +123,15 @@ socket.on('fine_asta', (dati) => {
 
 // MODIFICATO: aggiunto prossimoTurnoNome
 socket.on('inizio_partita_sincronizzato', (dati) => {
-    GameState.fase = 'GIOCANDO';
+    console.log("Partita iniziata ufficialmente!");
+    GameState.fase = 'GIOCANDO'; // <-- FONDAMENTALE: questo sblocca i click
     GameState.briscola = dati.seme;
     GameState.cartaChiamata = dati.carta;
     GameState.mioTurno = (socket.id === dati.prossimoTurnoId);
 
     assegnaPosti(dati.giocatori);
     
+    // Aggiorna la UI
     document.getElementById('interfaccia-asta').classList.add('d-none');
     document.getElementById('visualizza-numero-chiamato').innerText = dati.carta;
     document.getElementById('visualizza-briscola').innerText = dati.seme.toUpperCase();
@@ -137,7 +139,8 @@ socket.on('inizio_partita_sincronizzato', (dati) => {
     const elTurno = document.getElementById('nome-turno');
     if (elTurno) elTurno.innerText = GameState.mioTurno ? "TOCCA A TE" : dati.prossimoTurnoNome;
 
-    renderGame();
+    // Ridisegna la mano per attivare i click
+    disegnaManoReale(GameState.miaMano);
 });
 
 // MODIFICATO: aggiunto prossimoTurnoNome
@@ -214,13 +217,23 @@ function disegnaManoReale(carte) {
     const box = document.getElementById('mie-carte');
     if (!box) return;
     box.innerHTML = '';
+    
     carte.forEach((c, i) => {
         const img = document.createElement('img');
         img.src = c.img;
-        // La carta è cliccabile solo se è il mio turno e non siamo in asta
-        const puoGiocare = GameState.fase === 'GIOCANDO' && GameState.mioTurno;
+        
+        // IL PUNTO CRITICO: Deve essere fase GIOCANDO e deve essere il MIO TURNO
+        const puoGiocare = (GameState.fase === 'GIOCANDO' && GameState.mioTurno);
+        
         img.className = puoGiocare ? 'carta-mano' : 'carta-mano opaca';
-        img.onclick = () => { if(puoGiocare) giocaCartaUmano(i); };
+        
+        // Se può giocare, aggiungiamo il click, altrimenti no
+        if (puoGiocare) {
+            img.onclick = () => giocaCartaUmano(i);
+        } else {
+            img.onclick = null;
+        }
+        
         box.appendChild(img);
     });
 }
