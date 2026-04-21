@@ -108,13 +108,16 @@ socket.on('aggiorna_asta', (dati) => {
 
 socket.on('fine_asta', (dati) => {
     GameState.mioTurno = (socket.id === dati.vincitoreId);
-    const elTurno = document.getElementById('nome-turno');
-    if (elTurno) elTurno.innerText = "ATTESA SCELTA BRISCOLA...";
-
+    
     if (GameState.mioTurno) {
         preparaSceltaBriscola(); 
     } else {
-        document.getElementById('interfaccia-asta').classList.add('d-none');
+        // Gli altri vedono solo il messaggio di attesa
+        const container = document.getElementById('interfaccia-asta');
+        container.style.opacity = "0.5";
+        container.style.pointerEvents = "none";
+        const elTurno = document.getElementById('nome-turno');
+        if (elTurno) elTurno.innerText = `Attesa scelta briscola da: ${dati.vincitoreNome}`;
     }
 });
 
@@ -233,6 +236,12 @@ function gestisciVisibilitaAsta() {
 }
 
 function preparaSceltaBriscola() {
+    const container = document.getElementById('interfaccia-asta');
+    container.classList.remove('d-none'); // Assicurati che sia visibile
+    container.style.opacity = "1";        // Forza opacità massima
+    container.style.pointerEvents = "auto"; // Abilita i click
+
+    // Nascondi i controlli dell'asta e mostra i semi
     document.getElementById('btn-chiama').classList.add('d-none');
     document.getElementById('btn-passo').classList.add('d-none');
     document.getElementById('select-numero').classList.add('d-none');
@@ -264,13 +273,21 @@ document.addEventListener("DOMContentLoaded", () => {
 
     document.getElementById('btn-passo').onclick = () => socket.emit('mossa_asta', { tipo: 'PASSO' });
 
-    document.querySelectorAll('.btn-seme').forEach(btn => {
-        btn.onclick = () => {
-            const seme = btn.getAttribute('data-seme');
-            const carta = document.getElementById('valore-asta-carta').innerText;
-            socket.emit('scelta_briscola', { seme, carta });
-        };
-    });
+document.querySelectorAll('.btn-seme').forEach(btn => {
+    btn.onclick = () => {
+        const seme = btn.getAttribute('data-seme');
+        // Recuperiamo il testo, se è vuoto o "..." mettiamo l'ultimo valore conosciuto
+        let carta = document.getElementById('valore-asta-carta').innerText;
+        
+        if (!carta || carta === "...") {
+            console.warn("Attenzione: valore-asta-carta vuoto, invio valore di fallback");
+            carta = "2"; // Valore minimo di default se proprio non lo trova
+        }
+
+        console.log(`Invio scelta briscola: Seme=${seme}, Carta=${carta}`);
+        socket.emit('scelta_briscola', { seme, carta });
+    };
+});;
 });
 
 socket.on('partita_finita', (dati) => {

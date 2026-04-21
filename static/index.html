@@ -7,7 +7,7 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        body { background-color: #1a1a1a; color: white; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { background-color: #1a1a1a; color: white; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; overflow-x: hidden; }
         
         /* Area Lobby e Attesa */
         .container-main { min-height: 100vh; display: flex; align-items: center; justify-content: center; }
@@ -23,7 +23,7 @@
             border-radius: 200px;
             margin: 20px auto;
             box-shadow: 0 20px 50px rgba(0,0,0,0.5);
-            overflow: hidden;
+            z-index: 1;
         }
 
         /* Carte */
@@ -34,8 +34,14 @@
             border-radius: 5px;
         }
         .carta-mano:hover { transform: translateY(-20px); box-shadow: 0 10px 20px rgba(0,0,0,0.4); }
+        .carta-mano.opaca { opacity: 0.5; cursor: not-allowed; filter: grayscale(0.3); }
         
-        .carta-tavolo { width: 70px; border-radius: 5px; box-shadow: 2px 2px 10px rgba(0,0,0,0.5); }
+        .carta-tavolo { 
+            width: 75px; 
+            border-radius: 5px; 
+            box-shadow: 2px 2px 10px rgba(0,0,0,0.5);
+            border: 1px solid rgba(255,255,255,0.2);
+        }
 
         /* Posizionamento Avversari */
         .avversario { text-shadow: 2px 2px 4px rgba(0,0,0,0.8); z-index: 10; }
@@ -45,6 +51,15 @@
             border: 2px solid white;
             border-radius: 4px;
             margin: 5px auto;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* Centro Tavolo */
+        #centro-tavolo {
+            z-index: 5;
+            pointer-events: none;
         }
 
         /* Overlay Asta e Risultati */
@@ -53,6 +68,8 @@
             background: rgba(0,0,0,0.9); z-index: 9999;
             display: flex; flex-direction: column; align-items: center; justify-content: center;
         }
+
+        .badge-punti { background: rgba(0,0,0,0.6); font-size: 0.7rem; }
     </style>
 </head>
 <body>
@@ -61,7 +78,7 @@
     
     <div id="area-lobby" class="text-center py-5">
         <h1 class="display-2 mb-2 fw-bold text-warning">BRISCOLA <span class="text-white">5</span></h1>
-        <p class="lead mb-5 text-secondary">Crea una stanza o unisciti a una sfida attiva</p>
+        <p class="lead mb-5 text-secondary">La sfida online della chiamata</p>
         
         <button id="btn-crea" class="btn btn-success btn-lg px-5 shadow-lg mb-5">
             <i class="fas fa-plus-circle me-2"></i>Crea Nuova Partita
@@ -79,50 +96,50 @@
 
     <div id="area-attesa" class="text-center py-5 d-none">
         <div class="spinner-grow text-warning mb-4" style="width: 3rem; height: 3rem;" role="status"></div>
-        <h2 class="display-4">Stanza di <span id="nome-host" class="text-warning">...</span></h2>
-        <p class="lead">In attesa di altri giocatori per iniziare...</p>
+        <h2 class="display-4 text-warning">Pronti a iniziare?</h2>
         <div class="h1 mb-4"><span id="count-giocatori" class="badge bg-primary">1</span> / 5</div>
-        <p class="text-muted italic">La partita inizierà automaticamente al completo.</p>
+        <p class="text-muted italic">La partita inizierà quando entreranno 5 giocatori.</p>
     </div>
 
     <div id="tavolo-gioco" class="d-none">
-        <div class="row mb-3 align-items-center bg-dark p-2 rounded shadow-sm border-bottom border-warning">
-            <div class="col-md-4">
+        <div class="row mb-3 align-items-center bg-dark p-2 rounded shadow-sm border-bottom border-warning mx-1">
+            <div class="col-4">
                 <span class="text-secondary small">BRISCOLA:</span> 
-                <span id="visualizza-briscola" class="fw-bold text-uppercase ms-2">-</span>
+                <span id="visualizza-briscola" class="fw-bold text-uppercase ms-2 text-info">-</span>
             </div>
-            <div class="col-md-4 text-center">
+            <div class="col-4 text-center">
+                <span class="text-secondary small me-1">CHIAMATA:</span>
                 <span id="visualizza-numero-chiamato" class="badge bg-danger fs-6">-</span>
             </div>
-            <div class="col-md-4 text-end">
-                <span class="text-secondary small">TURNO DI:</span>
+            <div class="col-4 text-end">
+                <span class="text-secondary small">TURNO:</span>
                 <span id="nome-turno" class="text-warning fw-bold ms-2">...</span>
             </div>
         </div>
 
         <div id="board">
             <div id="box-nord-ovest" class="avversario position-absolute top-0 start-0 m-4 text-center">
-                <div id="nome-nord-ovest" class="small fw-bold">Giocatore 2</div>
+                <div id="nome-nord-ovest" class="small fw-bold">...</div>
                 <div class="mazzetto-coperto"></div>
-                <div class="badge bg-black opacity-75">Punti: <span id="punti-nord-ovest">0</span></div>
+                <div class="badge-punti px-2 rounded">Punti: <span id="punti-nord-ovest">0</span></div>
             </div>
 
             <div id="box-nord-est" class="avversario position-absolute top-0 end-0 m-4 text-center">
-                <div id="nome-nord-est" class="small fw-bold">Giocatore 3</div>
+                <div id="nome-nord-est" class="small fw-bold">...</div>
                 <div class="mazzetto-coperto"></div>
-                <div class="badge bg-black opacity-75">Punti: <span id="punti-nord-est">0</span></div>
+                <div class="badge-punti px-2 rounded">Punti: <span id="punti-nord-est">0</span></div>
             </div>
 
             <div id="box-est" class="avversario position-absolute top-50 end-0 translate-middle-y me-4 text-center">
-                <div id="nome-est" class="small fw-bold">Giocatore 4</div>
+                <div id="nome-est" class="small fw-bold">...</div>
                 <div class="mazzetto-coperto"></div>
-                <div class="badge bg-black opacity-75">Punti: <span id="punti-est">0</span></div>
+                <div class="badge-punti px-2 rounded">Punti: <span id="punti-est">0</span></div>
             </div>
 
             <div id="box-ovest" class="avversario position-absolute top-50 start-0 translate-middle-y ms-4 text-center">
-                <div id="nome-ovest" class="small fw-bold">Giocatore 5</div>
+                <div id="nome-ovest" class="small fw-bold">...</div>
                 <div class="mazzetto-coperto"></div>
-                <div class="badge bg-black opacity-75">Punti: <span id="punti-ovest">0</span></div>
+                <div class="badge-punti px-2 rounded">Punti: <span id="punti-ovest">0</span></div>
             </div>
 
             <div id="centro-tavolo" class="position-absolute top-50 start-50 translate-middle d-flex justify-content-center align-items-center gap-2" style="width: 400px; height: 150px;">
@@ -130,9 +147,14 @@
         </div>
 
         <div id="interfaccia-asta" class="p-3 bg-dark border border-secondary rounded shadow mt-3 d-none">
+            <div class="text-center mb-3 border-bottom border-secondary pb-2">
+                <span class="text-secondary small text-uppercase">Valore attuale dell'asta:</span>
+                <span id="valore-asta-carta" class="text-warning fw-bold fs-4 ms-2">2</span> 
+            </div>
+
             <div class="row align-items-center">
                 <div class="col-md-4 text-center">
-                    <h4 class="m-0"><i class="fas fa-gavel me-2"></i>FASE ASTA</h4>
+                    <h4 class="m-0 small tracking-widest"><i class="fas fa-gavel me-2 text-warning"></i>FASE DI ASTA</h4>
                 </div>
                 <div class="col-md-8 d-flex justify-content-center gap-3">
                     <select id="select-numero" class="form-select w-auto bg-black text-white border-secondary">
@@ -145,28 +167,28 @@
                         <option value="6">6</option>
                         <option value="5">5</option>
                         <option value="4">4</option>
-                        <option value="2">2</option>
+                        <option value="2" selected>2</option>
                     </select>
                     <button id="btn-chiama" class="btn btn-warning px-4 fw-bold">CHIAMA</button>
-                    <button id="btn-passo" class="btn btn-outline-light px-4">PASSO</button>
+                    <button id="btn-passo" class="btn btn-outline-danger px-4">PASSO</button>
                 </div>
             </div>
 
             <div id="scelta-seme" class="text-center mt-3 pt-3 border-top border-secondary d-none">
-                <h5 class="text-warning">Hai vinto l'asta! Scegli la briscola:</h5>
-                <div class="btn-group mt-2">
-                    <button class="btn btn-outline-warning btn-seme" data-seme="bastoni">Bastoni</button>
-                    <button class="btn btn-outline-warning btn-seme" data-seme="coppe">Coppe</button>
-                    <button class="btn btn-outline-warning btn-seme" data-seme="spade">Spade</button>
-                    <button class="btn btn-outline-warning btn-seme" data-seme="ori">Ori</button>
+                <h5 class="text-warning animate__animated animate__pulse animate__infinite">HAI VINTO! SCEGLI IL SEME DI BRISCOLA:</h5>
+                <div class="btn-group mt-2 shadow">
+                    <button class="btn btn-outline-warning btn-seme px-4" data-seme="bastoni">Bastoni</button>
+                    <button class="btn btn-outline-warning btn-seme px-4" data-seme="coppe">Coppe</button>
+                    <button class="btn btn-outline-warning btn-seme px-4" data-seme="spade">Spade</button>
+                    <button class="btn btn-outline-warning btn-seme px-4" data-seme="ori">Ori</button>
                 </div>
             </div>
         </div>
 
-        <div class="mt-4 p-3 bg-black bg-opacity-50 rounded">
+        <div class="mt-4 p-3 bg-black bg-opacity-50 rounded border border-secondary">
             <div class="d-flex justify-content-between align-items-center mb-3">
-                <span class="badge bg-secondary">TU (SUD)</span>
-                <div class="fw-bold">PUNTI ACCUMULATI: <span id="punti-sud" class="text-success fs-5">0</span></div>
+                <span class="badge bg-secondary px-3">LA TUA MANO</span>
+                <div class="fw-bold">PUNTI: <span id="punti-sud" class="text-success fs-5">0</span></div>
             </div>
             <div id="mie-carte" class="d-flex justify-content-center gap-2 flex-wrap">
                 </div>
@@ -178,18 +200,18 @@
     <h1 id="titolo-vittoria" class="display-1 fw-bold text-warning mb-0">...</h1>
     <p class="h3 text-white-50 mb-5">Fine Partita</p>
     
-    <div class="bg-dark p-5 rounded-4 border border-warning shadow-lg text-center" style="min-width: 400px;">
+    <div class="bg-dark p-5 rounded-4 border border-warning shadow-lg text-center" style="min-width: 440px;">
         <div class="mb-4">
-            <h4 class="text-secondary text-uppercase small">Squadra Chiamante</h4>
-            <p class="h2" id="nomi-chiamanti">...</p>
+            <h4 class="text-secondary text-uppercase small tracking-widest">Team Chiamante</h4>
+            <p class="h3 text-white" id="nomi-chiamanti">...</p>
             <p class="display-6 fw-bold text-warning" id="punti-chiamanti-finale">0</p>
         </div>
         <div class="mb-5">
-            <h4 class="text-secondary text-uppercase small">Squadra Altri</h4>
+            <h4 class="text-secondary text-uppercase small tracking-widest">Team Opposizione</h4>
             <p class="display-6 fw-bold text-info" id="punti-altri-finale">0</p>
         </div>
-        <button onclick="location.reload()" class="btn btn-outline-warning btn-lg px-5 rounded-pill">
-            TORNA ALLA LOBBY
+        <button onclick="location.reload()" class="btn btn-warning btn-lg px-5 rounded-pill fw-bold">
+            NUOVA PARTITA
         </button>
     </div>
 </div>
