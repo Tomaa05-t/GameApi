@@ -63,6 +63,11 @@ socket.on('aggiorna_lista_partite', (partite) => {
 socket.on('partita_creata', (roomID) => {
     GameState.roomID = roomID;
     GameState.fase = 'ATTESA';
+
+    // Scrive il nome dell'host nell'area attesa (se hai aggiunto lo span nell'html)
+    const elHost = document.getElementById('nome-host');
+    if (elHost) elHost.innerText = window.GameState.nomeUtente;
+    
     renderGame();
 });
 
@@ -223,6 +228,7 @@ function preparaSceltaBriscola() {
 document.addEventListener("DOMContentLoaded", () => {
     document.getElementById('btn-crea').onclick = () => {
         const nome = prompt("Nome della stanza (tuo nome):") || "Player";
+        window.GameState.nomeUtente = nome;
         socket.emit('crea_partita', nome);
     };
 

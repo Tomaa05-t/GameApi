@@ -169,7 +169,11 @@ io.on('connection', (socket) => {
 function ottieniListaLobby() {
     return Object.values(partite)
         .filter(p => p.stato === 'LOBBY')
-        .map(p => ({ id: p.id, creatore: p.creatore, n: p.giocatori.length }));
+        .map(p => ({ 
+            id: p.id, 
+            creatore: p.creatore, // Deve corrispondere a quello sopra
+            n: p.giocatori.length 
+        }));
 }
 
 function inviaListaPartite(socket) {
