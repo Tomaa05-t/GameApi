@@ -121,25 +121,35 @@ socket.on('fine_asta', (dati) => {
     }
 });
 
-// MODIFICATO: aggiunto prossimoTurnoNome
 socket.on('inizio_partita_sincronizzato', (dati) => {
-    console.log("Partita iniziata ufficialmente!");
-    GameState.fase = 'GIOCANDO'; // <-- FONDAMENTALE: questo sblocca i click
-    GameState.briscola = dati.seme;
-    GameState.cartaChiamata = dati.carta;
+    console.log("Partita iniziata ufficialmente!", dati);
+    GameState.fase = 'GIOCANDO';
     GameState.mioTurno = (socket.id === dati.prossimoTurnoId);
+    
+    // Gestione briscola speciale per Carichi
+    if (dati.isAcarichi) {
+        GameState.briscola = "Senza Briscola (Comanda l'uscita)";
+        GameState.cartaChiamata = "A CARICHI";
+    } else {
+        GameState.briscola = dati.seme;
+        GameState.cartaChiamata = dati.carta;
+    }
 
     assegnaPosti(dati.giocatori);
     
-    // Aggiorna la UI
-    document.getElementById('interfaccia-asta').classList.add('d-none');
-    document.getElementById('visualizza-numero-chiamato').innerText = dati.carta;
-    document.getElementById('visualizza-briscola').innerText = dati.seme.toUpperCase();
+    // UI Update
+    const interAsta = document.getElementById('interfaccia-asta');
+    if (interAsta) interAsta.classList.add('d-none');
+    
+    document.getElementById('visualizza-numero-chiamato').innerText = GameState.cartaChiamata;
+    document.getElementById('visualizza-briscola').innerText = GameState.briscola.toUpperCase();
     
     const elTurno = document.getElementById('nome-turno');
-    if (elTurno) elTurno.innerText = GameState.mioTurno ? "TOCCA A TE" : dati.prossimoTurnoNome;
+    if (elTurno) {
+        elTurno.innerText = GameState.mioTurno ? "TOCCA A TE (ESCI!)" : dati.prossimoTurnoNome;
+        GameState.mioTurno ? elTurno.classList.add('text-warning') : elTurno.classList.remove('text-warning');
+    }
 
-    // Ridisegna la mano per attivare i click
     disegnaManoReale(GameState.miaMano);
 });
 
@@ -241,10 +251,18 @@ function disegnaManoReale(carte) {
 function gestisciVisibilitaAsta() {
     const container = document.getElementById('interfaccia-asta');
     if (!container) return;
+    
     if (GameState.fase === 'ASTA') {
         container.classList.remove('d-none');
         container.style.opacity = GameState.mioTurno ? "1" : "0.5";
         container.style.pointerEvents = GameState.mioTurno ? "auto" : "none";
+        
+        // Assicuriamoci che i bottoni standard siano visibili finché dura l'asta
+        document.getElementById('btn-chiama').classList.remove('d-none');
+        document.getElementById('btn-passo').classList.remove('d-none');
+        document.getElementById('select-numero').classList.remove('d-none');
+        document.getElementById('btn-carichi').classList.remove('d-none');
+        document.getElementById('scelta-seme').classList.add('d-none');
     }
 }
 
@@ -285,6 +303,21 @@ document.addEventListener("DOMContentLoaded", () => {
     };
 
     document.getElementById('btn-passo').onclick = () => socket.emit('mossa_asta', { tipo: 'PASSO' });
+
+    // --- GESTIONE BOTTONE A CARICHI ---
+    document.getElementById('btn-carichi').onclick = () => {
+        if (!GameState.mioTurno) {
+            alert("Non è il tuo turno di parlare!");
+            return;
+        }
+
+        // Non serve prompt se la regola è "Senza Briscola"
+        if (confirm("Sei sicuro di voler chiamare A CARICHI? Sfiderai tutti da solo senza briscola fissa!")) {
+            socket.emit('mossa_asta', { 
+                tipo: 'CARICHI' 
+            });
+        }
+    };
 
 document.querySelectorAll('.btn-seme').forEach(btn => {
     btn.onclick = () => {

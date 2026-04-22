@@ -150,43 +150,58 @@
         </div>
 
         <div id="interfaccia-asta" class="p-3 bg-dark border border-secondary rounded shadow mt-3 d-none">
-            <div class="text-center mb-3 border-bottom border-secondary pb-2">
-                <span class="text-secondary small text-uppercase">Valore attuale dell'asta:</span>
-                <span id="valore-asta-carta" class="text-warning fw-bold fs-4 ms-2">2</span> 
-            </div>
+    <div class="text-center mb-3 border-bottom border-secondary pb-2">
+        <span class="text-secondary small text-uppercase">Valore attuale:</span>
+        <span id="valore-asta-carta" class="text-warning fw-bold fs-4 ms-2">2</span> 
+    </div>
 
-            <div class="row align-items-center">
-                <div class="col-md-4 text-center">
-                    <h4 class="m-0 small tracking-widest"><i class="fas fa-gavel me-2 text-warning"></i>FASE DI ASTA</h4>
-                </div>
-                <div class="col-md-8 d-flex justify-content-center gap-3">
-                    <select id="select-numero" class="form-select w-auto bg-black text-white border-secondary">
-                        <option value="1">Asso</option>
-                        <option value="3">3</option>
-                        <option value="10">Re</option>
-                        <option value="9">Cavallo</option>
-                        <option value="8">Fante</option>
-                        <option value="7">7</option>
-                        <option value="6">6</option>
-                        <option value="5">5</option>
-                        <option value="4">4</option>
-                        <option value="2" selected>2</option>
-                    </select>
-                    <button id="btn-chiama" class="btn btn-warning px-4 fw-bold">CHIAMA</button>
-                    <button id="btn-passo" class="btn btn-outline-danger px-4">PASSO</button>
-                </div>
-            </div>
-
-            <div id="scelta-seme" class="text-center mt-3 pt-3 border-top border-secondary d-none">
-                <h5 class="text-warning animate__animated animate__pulse animate__infinite">HAI VINTO! SCEGLI IL SEME DI BRISCOLA:</h5>
-                <div class="btn-group mt-2 shadow">
-                    <button class="btn btn-outline-warning btn-seme px-4" data-seme="bastoni">Bastoni</button>
-                    <button class="btn btn-outline-warning btn-seme px-4" data-seme="coppe">Coppe</button>
-                    <button class="btn btn-outline-warning btn-seme px-4" data-seme="spade">Spade</button>
-                    <button class="btn btn-outline-warning btn-seme px-4" data-seme="ori">Ori</button>
-                </div>
-            </div>
+    <div class="row align-items-center g-3">
+        <div class="col-xl-2 col-md-12 text-center text-xl-start">
+            <h5 class="m-0 small tracking-widest text-uppercase">
+                <i class="fas fa-gavel me-2 text-warning"></i>Asta
+            </h5>
         </div>
+
+        <div class="col-xl-10 col-md-12 d-flex justify-content-center justify-content-xl-end gap-2 flex-wrap">
+            <select id="select-numero" class="form-select w-auto bg-black text-white border-secondary">
+                <option value="1">Asso</option>
+                <option value="3">3</option>
+                <option value="10">Re</option>
+                <option value="9">Cavallo</option>
+                <option value="8">Fante</option>
+                <option value="7">7</option>
+                <option value="6">6</option>
+                <option value="5">5</option>
+                <option value="4">4</option>
+                <option value="2" selected>2</option>
+            </select>
+            
+            <button id="btn-chiama" class="btn btn-warning px-3 fw-bold">
+                CHIAMA
+            </button>
+            
+            <button id="btn-passo" class="btn btn-outline-light px-3">
+                PASSO
+            </button>
+
+            <button id="btn-carichi" class="btn btn-danger px-4 fw-bold shadow-sm">
+                <i class="fas fa-fire me-1"></i> A CARICHI
+            </button>
+        </div>
+    </div>
+
+    <div id="scelta-seme" class="text-center mt-3 pt-3 border-top border-secondary d-none">
+        <h5 id="messaggio-scelta" class="text-warning animate__animated animate__pulse animate__infinite">
+            HAI VINTO! SCEGLI IL SEME DI BRISCOLA:
+        </h5>
+        <div class="btn-group mt-2 shadow">
+            <button class="btn btn-outline-warning btn-seme px-4" data-seme="bastoni">Bastoni</button>
+            <button class="btn btn-outline-warning btn-seme px-4" data-seme="coppe">Coppe</button>
+            <button class="btn btn-outline-warning btn-seme px-4" data-seme="spade">Spade</button>
+            <button class="btn btn-outline-warning btn-seme px-4" data-seme="ori">Ori</button>
+        </div>
+    </div>
+</div>
 
         <div class="mt-4 p-3 bg-black bg-opacity-50 rounded border border-secondary">
             <div class="d-flex justify-content-between align-items-center mb-3">

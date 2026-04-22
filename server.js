@@ -50,6 +50,9 @@ io.on('connection', (socket) => {
             maniGiocate: 0,
             indiceTurnoGiocata: 0,
             carteSulTavolo: [],
+            puntiGiocatori: { [socket.id]: 0 },
+            isAcarichi: false,      // Inizializza
+            senzaBriscola: false,   // Inizializza
             puntiGiocatori: { [socket.id]: 0 }
         };
 
@@ -81,41 +84,72 @@ io.on('connection', (socket) => {
     });
 
     // 3. LOGICA ASTA (Sincronizzata con Nomi)
-    socket.on('mossa_asta', (dati) => {
-        const p = partite[socket.roomID];
-        if (!p) return;
+socket.on('mossa_asta', (dati) => {
+    const p = partite[socket.roomID];
+    if (!p || p.stato !== 'ASTA') return;
 
-        // Verifica turno
-        const idCorrente = p.giocatoriInAsta[p.indiceTurnoAsta];
-        if (socket.id !== idCorrente) return;
+    // 1. Verifica turno
+    const idCorrente = p.giocatoriInAsta[p.indiceTurnoAsta];
+    if (socket.id !== idCorrente) return;
 
-        if (dati.tipo === 'PASSO') {
-            p.giocatoriInAsta.splice(p.indiceTurnoAsta, 1);
-            if (p.indiceTurnoAsta >= p.giocatoriInAsta.length) p.indiceTurnoAsta = 0;
-        } else {
-            p.indiceTurnoAsta = (p.indiceTurnoAsta + 1) % p.giocatoriInAsta.length;
-        }
+    // --- NUOVA LOGICA: GESTIONE CARICHI ---
+    if (dati.tipo === 'CARICHI') {
+        p.stato = 'GIOCANDO';
+        p.idChiamante = socket.id;
+        p.idSocio = socket.id; // Chiamante e Socio sono la stessa persona
+        p.isAcarichi = true;
+        p.senzaBriscola = true; // Attiva la logica "chi esce comanda il seme"
+        p.briscolaCorrente = "nessuna";
+        p.cartaChiamataCorrente = "A CARICHI";
+        
+        // Chi chiama a carichi ha sempre il primo turno di gioco
+        p.indiceTurnoGiocata = p.giocatori.findIndex(g => g.id === socket.id);
+        const vincitore = p.giocatori[p.indiceTurnoGiocata];
 
-        if (p.giocatoriInAsta.length === 1) {
-            const vincitoreId = p.giocatoriInAsta[0];
-            const vincitore = p.giocatori.find(g => g.id === vincitoreId);
-            
-            io.to(p.id).emit('fine_asta', { 
-                vincitoreId: vincitoreId, 
-                vincitoreNome: vincitore ? vincitore.nome : "Sconosciuto" 
-            });
-        } else {
-            const prossimoId = p.giocatoriInAsta[p.indiceTurnoAsta];
-            const prossimoNome = p.giocatori.find(g => g.id === prossimoId).nome;
+        // Comunica a tutti l'inizio immediato
+        io.to(p.id).emit('inizio_partita_sincronizzato', {
+            seme: "A CARICHI (Senza Briscola)",
+            carta: "CARICHI",
+            prossimoTurnoId: socket.id,
+            prossimoTurnoNome: vincitore.nome,
+            giocatori: p.giocatori,
+            isAcarichi: true
+        });
+        return; // Interrompe l'asta qui
+    }
 
-            io.to(p.id).emit('aggiorna_asta', {
-                ultimoValore: dati.valore,
-                indice: dati.indice,
-                prossimoGiocatoreId: prossimoId,
-                prossimoGiocatoreNome: prossimoNome
-            });
-        }
-    });
+    // --- LOGICA ASTA STANDARD ---
+    if (dati.tipo === 'PASSO') {
+        p.giocatoriInAsta.splice(p.indiceTurnoAsta, 1);
+        // Se l'indice ora punta fuori dalla lista accorciata, resetta a 0
+        if (p.indiceTurnoAsta >= p.giocatoriInAsta.length) p.indiceTurnoAsta = 0;
+    } else {
+        // Se chiama una carta, passa semplicemente al prossimo giocatore
+        p.indiceTurnoAsta = (p.indiceTurnoAsta + 1) % p.giocatoriInAsta.length;
+    }
+
+    // Controlla se l'asta è finita normalmente
+    if (p.giocatoriInAsta.length === 1) {
+        const vincitoreId = p.giocatoriInAsta[0];
+        const vincitore = p.giocatori.find(g => g.id === vincitoreId);
+        
+        io.to(p.id).emit('fine_asta', { 
+            vincitoreId: vincitoreId, 
+            vincitoreNome: vincitore ? vincitore.nome : "Sconosciuto" 
+        });
+    } else {
+        // L'asta continua: notifica il prossimo turno
+        const prossimoId = p.giocatoriInAsta[p.indiceTurnoAsta];
+        const prossimoGiocatore = p.giocatori.find(g => g.id === prossimoId);
+
+        io.to(p.id).emit('aggiorna_asta', {
+            ultimoValore: dati.valore || "2", // Fallback se non definito
+            indice: dati.indice || 0,
+            prossimoGiocatoreId: prossimoId,
+            prossimoGiocatoreNome: prossimoGiocatore ? prossimoGiocatore.nome : "..."
+        });
+    }
+});
 
     // 4. SCELTA BRISCOLA
 // Cerca questa parte nel server.js
@@ -123,21 +157,33 @@ socket.on('scelta_briscola', (dati) => {
     const p = partite[socket.roomID];
     if (!p) return;
 
-    p.stato = 'GIOCANDO'; // Cambia lo stato sul server
+    p.stato = 'GIOCANDO';
     p.idChiamante = socket.id;
     p.briscolaCorrente = dati.seme;
-    p.cartaChiamataCorrente = dati.carta;
     
-    // Il primo a giocare è chi ha chiamato (il vincitore dell'asta)
+    // CONTROLLO CARICHI
+    if (dati.tipo === 'CARICHI' || dati.carta === 'CARICHI') {
+        p.isAcarichi = true;
+        p.idSocio = socket.id; // Il socio è il chiamante stesso
+        p.cartaChiamataCorrente = "CARICHI";
+    } else {
+        p.isAcarichi = false;
+        p.cartaChiamataCorrente = dati.carta;
+        
+        // Logica standard: il socio verrà identificato appena la carta viene giocata
+        // o puoi cercarlo subito tra le mani dei giocatori qui
+        p.idSocio = null; 
+    }
+
     p.indiceTurnoGiocata = p.giocatori.findIndex(g => g.id === socket.id);
 
-    // IMPORTANTE: Usa io.to(p.id) per svegliare tutti i giocatori!
     io.to(p.id).emit('inizio_partita_sincronizzato', {
         seme: p.briscolaCorrente,
-        carta: p.cartaChiamataCorrente,
+        carta: p.cartaChiamataCorrente, // Sarà il nome della carta o "CARICHI"
         prossimoTurnoId: socket.id,
         prossimoTurnoNome: p.giocatori[p.indiceTurnoGiocata].nome,
-        giocatori: p.giocatori // Invia la lista per mappare i posti
+        giocatori: p.giocatori,
+        isAcarichi: p.isAcarichi // Utile passarlo al client per la UI
     });
 });
 
@@ -146,10 +192,10 @@ socket.on('scelta_briscola', (dati) => {
         const p = partite[socket.roomID];
         if (!p || socket.id !== p.giocatori[p.indiceTurnoGiocata].id) return;
 
-        // Controllo Socio (quando viene giocata la carta chiamata)
-        if (dati.carta.valore == p.cartaChiamataCorrente && dati.carta.seme == p.briscolaCorrente) {
+        // Controllo Socio: Solo se NON siamo a carichi
+        if (!p.isAcarichi && dati.carta.valore == p.cartaChiamataCorrente && dati.carta.seme == p.briscolaCorrente) {
             p.idSocio = socket.id;
-            console.log("Il socio è stato trovato:", socket.id);
+            console.log("Socio identificato:", socket.id);
         }
 
         p.carteSulTavolo.push({ giocatoreId: socket.id, carta: dati.carta });
@@ -218,18 +264,28 @@ function risolviPresa(roomID) {
     if (!p) return;
 
     let vincente = p.carteSulTavolo[0];
-    const semeBase = vincente.carta.seme;
+    const semeDiMano = vincente.carta.seme; // Il seme della prima carta giocata
 
     for (let i = 1; i < p.carteSulTavolo.length; i++) {
         const sfidante = p.carteSulTavolo[i];
-        // Se lo sfidante gioca briscola e il vincente no
-        if (sfidante.carta.seme === p.briscolaCorrente && vincente.carta.seme !== p.briscolaCorrente) {
-            vincente = sfidante;
-        } 
-        // Se giocano entrambi lo stesso seme (briscola o seme di mano)
-        else if (sfidante.carta.seme === vincente.carta.seme) {
-            if (confrontaCarte(sfidante.carta.valore, vincente.carta.valore)) {
+
+        if (p.senzaBriscola) {
+            // --- LOGICA A CARICHI (SENZA BRISCOLA) ---
+            // Vince solo se ha lo stesso seme della prima carta ed è più alta
+            if (sfidante.carta.seme === semeDiMano) {
+                if (confrontaCarte(sfidante.carta.valore, vincente.carta.valore)) {
+                    vincente = sfidante;
+                }
+            }
+        } else {
+            // --- LOGICA STANDARD (CON BRISCOLA) ---
+            if (sfidante.carta.seme === p.briscolaCorrente && vincente.carta.seme !== p.briscolaCorrente) {
                 vincente = sfidante;
+            } 
+            else if (sfidante.carta.seme === vincente.carta.seme) {
+                if (confrontaCarte(sfidante.carta.valore, vincente.carta.valore)) {
+                    vincente = sfidante;
+                }
             }
         }
     }
@@ -251,6 +307,7 @@ function risolviPresa(roomID) {
         setTimeout(() => inviaRisultatiFinali(roomID), 2000);
     }
 }
+
 
 function inviaRisultatiFinali(roomID) {
     const p = partite[roomID];
