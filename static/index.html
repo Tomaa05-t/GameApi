@@ -47,13 +47,16 @@
         .avversario { text-shadow: 2px 2px 4px rgba(0,0,0,0.8); z-index: 10; }
         .mazzetto-coperto {
             width: 40px; height: 60px;
-            background: linear-gradient(45deg, #700, #a00);
-            border: 2px solid white;
+            /* IMPOSTIAMO LA TUA IMMAGINE DI RETRO */
+            background-image: url('carte/retro.jpg'); /* <-- CONTROLLA IL NOME FILE QUI */
+            background-size: cover;       /* Copre tutto l'orientamento */
+            background-position: center;  /* Centra l'immagine */
+            background-repeat: no-repeat; /* Non ripete l'immagine */
+
+            border: 1px solid rgba(255,255,255,0.5); /* Bordo bianco semi-trasparente */
             border-radius: 4px;
+            box-shadow: 2px 2px 5px rgba(0,0,0,0.5);
             margin: 5px auto;
-            display: flex;
-            align-items: center;
-            justify-content: center;
         }
 
         /* Centro Tavolo */
