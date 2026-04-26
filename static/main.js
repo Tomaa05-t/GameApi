@@ -164,7 +164,7 @@ socket.on('inizio_partita_sincronizzato', (dati) => {
     
     const elTurno = document.getElementById('nome-turno');
     if (elTurno) {
-        elTurno.innerText = GameState.mioTurno ? "TOCCA A TE (ESCI!)" : dati.prossimoTurnoNome;
+        elTurno.innerText = GameState.mioTurno ? "TOCCA A TE!" : dati.prossimoTurnoNome;
         GameState.mioTurno ? elTurno.classList.add('text-warning') : elTurno.classList.remove('text-warning');
     }
 
@@ -204,7 +204,7 @@ socket.on('fine_mano', (dati) => {
 // Mostra la modale finale con i risultati quando le 8 mani sono terminate
 socket.on('partita_finita', (dati) => {
     const win = document.getElementById('schermata-finale');
-    document.getElementById('titolo-vittoria').innerText = dati.vittoriaChiamanti ? "I CHIAMANTI VINCONO!" : "GLI AVVERSARI VINCONO!";
+    document.getElementById('titolo-vittoria').innerText = dati.vittoriaChiamanti ? "I CHIAMANTI VINCONO!" : "I CHIAMANTI PERDONO!";
     document.getElementById('nomi-chiamanti').innerText = dati.chiamante;
     document.getElementById('punti-chiamanti-finale').innerText = dati.puntiChiamanti;
     document.getElementById('punti-altri-finale').innerText = dati.puntiAltri;
