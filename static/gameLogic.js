@@ -12,11 +12,11 @@ const GameState = {
     cartaChiamata: null     // Il numero chiamato (es. "Asso")
 };
 
-function renderGame() {
+function renderGame() { // Aggiorna l'interfaccia in base alla fase attuale del gioco
     const areaLobby = document.getElementById('area-lobby');
     const tavoloGioco = document.getElementById('tavolo-gioco');
     const interfacciaAsta = document.getElementById('interfaccia-asta');
-    const areaAttesa = document.getElementById('area-attesa'); // Assicurati di avere questo ID nell'HTML
+    const areaAttesa = document.getElementById('area-attesa'); 
 
     // 1. Reset: Nascondi tutto per evitare sovrapposizioni
     if (areaLobby) areaLobby.classList.add('d-none');
