@@ -201,21 +201,20 @@ socket.on('scelta_briscola', (dati) => {
     // --- 3e. GIOCATA CARTA ---
     // Gestione del flusso di gioco mano per mano
     socket.on('gioca_carta', (dati) => {
-        const p = partite[socket.roomID];
-        if (!p || socket.id !== p.giocatori[p.indiceTurnoGiocata].id) return;
+    const p = partite[socket.roomID];
+    if (!p || socket.id !== p.giocatori[p.indiceTurnoGiocata].id) return;
 
-        // --- LOGICA IDENTIFICAZIONE SOCIO MIGLIORATA ---
-        if (!p.isAcarichi && p.idSocio === null) {
-            // Usiamo == (doppio uguale) per evitare problemi tra stringa e numero
-            // E controlliamo che il seme sia quello della briscola scelta
-            if (dati.carta.valore == p.cartaChiamataCorrente && dati.carta.seme == p.briscolaCorrente) {
-                p.idSocio = socket.id;
-                console.log("Socio identificato con successo:", p.giocatori.find(g => g.id === socket.id).nome);
-            }
+    // LOGICA IDENTIFICAZIONE SOCIO (BLINDATA)
+    // Controlliamo se non è una partita "A Carichi" e se il socio non è ancora stato trovato
+    if (!p.isAcarichi && p.idSocio === null) {
+        // Usiamo == per sicurezza, ma avendo usato parseInt sopra, ora sono entrambi numeri
+        if (dati.carta.valore == p.cartaChiamataCorrente && dati.carta.seme == p.briscolaCorrente) {
+            p.idSocio = socket.id;
+            console.log("SOCIO TROVATO! È il giocatore:", socket.id);
         }
-    // ----------------------------------------------
+    }
 
-        p.carteSulTavolo.push({ giocatoreId: socket.id, carta: dati.carta });
+    p.carteSulTavolo.push({ giocatoreId: socket.id, carta: dati.carta });
         p.indiceTurnoGiocata = (p.indiceTurnoGiocata + 1) % p.giocatori.length;
 
         // Notifica a tutti i client quale carta è stata messa sul tavolo
