@@ -97,66 +97,77 @@ io.on('connection', (socket) => { //quando un nuovo client si connette al server
     // --- 3c. LOGICA ASTA ---
     // Gestisce i rilanci o il ritiro (Passo) dei giocatori durante la chiamata
     socket.on('mossa_asta', (dati) => {
-        const p = partite[socket.roomID];
-        if (!p || p.stato !== 'ASTA') return;
+    const p = partite[socket.roomID];
+    if (!p || p.stato !== 'ASTA') return;
 
-        // Controllo di sicurezza: solo il giocatore di turno può parlare
-        const idCorrente = p.giocatoriInAsta[p.indiceTurnoAsta];
-        if (socket.id !== idCorrente) return;
+    // 1. Verifica che sia il turno del giocatore che ha inviato il messaggio
+    const idCorrente = p.giocatoriInAsta[p.indiceTurnoAsta];
+    if (socket.id !== idCorrente) return;
 
-        // Chiamata "A CARICHI"
-        // Salta l'asta standard e imposta una sfida 1 contro 4 senza briscola
-        if (dati.tipo === 'CARICHI') {
-            p.stato = 'GIOCANDO';
-            p.idChiamante = socket.id; // Il chiamante è chi ha dichiarato "A CARICHI"
-            p.idSocio = socket.id; // In A CARICHI, il chiamante gioca da solo contro tutti, quindi è anche il "socio" di se stesso
-            p.isAcarichi = true;
-            p.senzaBriscola = true; 
-            p.briscolaCorrente = "nessuna";
-            p.cartaChiamataCorrente = "A CARICHI";
-            
-            p.indiceTurnoGiocata = p.giocatori.findIndex(g => g.id === socket.id);
-            const vincitore = p.giocatori[p.indiceTurnoGiocata];
+    // --- GESTIONE CHIAMATA "A CARICHI" ---
+    if (dati.tipo === 'CARICHI') {
+        p.stato = 'GIOCANDO';
+        p.idChiamante = socket.id;
+        p.idSocio = socket.id; // Chiamante e Socio coincidono
+        p.isAcarichi = true;
+        p.senzaBriscola = true; 
+        p.briscolaCorrente = "nessuna";
+        p.cartaChiamataCorrente = "A CARICHI";
+        
+        p.indiceTurnoGiocata = p.giocatori.findIndex(g => g.id === socket.id);
+        const vincitore = p.giocatori[p.indiceTurnoGiocata];
 
-            io.to(p.id).emit('inizio_partita_sincronizzato', {
-                seme: "A CARICHI (Senza Briscola)",
-                carta: "CARICHI",
-                prossimoTurnoId: socket.id,
-                prossimoTurnoNome: vincitore.nome,
-                giocatori: p.giocatori,
-                isAcarichi: true
-            });
-            return;
-        }
+        io.to(p.id).emit('inizio_partita_sincronizzato', {
+            seme: "A CARICHI (Senza Briscola)",
+            carta: "CARICHI",
+            prossimoTurnoId: socket.id,
+            prossimoTurnoNome: vincitore.nome,
+            giocatori: p.giocatori,
+            isAcarichi: true
+        });
+        return; 
+    }
 
-        // Logica Asta Standard: Passo o Chiamata
-        if (dati.tipo === 'PASSO') {
-            p.giocatoriInAsta.splice(p.indiceTurnoAsta, 1); // Rimuove chi passa dall'asta
-            if (p.indiceTurnoAsta >= p.giocatoriInAsta.length) p.indiceTurnoAsta = 0;
-        } else {
-            p.indiceTurnoAsta = (p.indiceTurnoAsta + 1) % p.giocatoriInAsta.length;
-        }
+    // --- LOGICA ASTA STANDARD ---
+    if (dati.tipo === 'PASSO') {
+        // Il giocatore si ritira dall'asta
+        p.giocatoriInAsta.splice(p.indiceTurnoAsta, 1);
+        
+        // Se chi passa era l'ultimo della lista, resettiamo l'indice a 0
+        if (p.indiceTurnoAsta >= p.giocatoriInAsta.length) p.indiceTurnoAsta = 0;
+    } else {
+        // Il giocatore ha chiamato una carta (es. il "3")
+        // SALVIAMO I DATI NELLO STATO DELLA PARTITA PER RENDERLI PERSISTENTI
+        p.ultimaCartaChiamataValore = dati.valore; 
+        p.ultimoIndiceAsta = dati.indice;
+        
+        // Passiamo al prossimo giocatore nell'elenco di chi è ancora in asta
+        p.indiceTurnoAsta = (p.indiceTurnoAsta + 1) % p.giocatoriInAsta.length;
+    }
 
-        // Se è rimasto solo un giocatore, ha vinto l'asta
-        if (p.giocatoriInAsta.length === 1) {
-            const vincitoreId = p.giocatoriInAsta[0];
-            const vincitore = p.giocatori.find(g => g.id === vincitoreId);
-            io.to(p.id).emit('fine_asta', { 
-                vincitoreId: vincitoreId, 
-                vincitoreNome: vincitore ? vincitore.nome : "Sconosciuto" 
-            });
-        } else {
-            // Continua l'asta con il prossimo giocatore
-            const prossimoId = p.giocatoriInAsta[p.indiceTurnoAsta];
-            const prossimoGiocatore = p.giocatori.find(g => g.id === prossimoId);
-            io.to(p.id).emit('aggiorna_asta', {
-                ultimoValore: dati.valore || "2",
-                indice: dati.indice || 0,
-                prossimoGiocatoreId: prossimoId,
-                prossimoGiocatoreNome: prossimoGiocatore ? prossimoGiocatore.nome : "..."
-            });
-        }
-    });
+    // 2. Controllo fine asta: è rimasto solo un giocatore?
+    if (p.giocatoriInAsta.length === 1) {
+        const vincitoreId = p.giocatoriInAsta[0];
+        const vincitore = p.giocatori.find(g => g.id === vincitoreId);
+        
+        io.to(p.id).emit('fine_asta', { 
+            vincitoreId: vincitoreId, 
+            vincitoreNome: vincitore ? vincitore.nome : "Sconosciuto" 
+        });
+    } else {
+        // 3. L'asta continua: notifica il prossimo turno con i dati aggiornati
+        const prossimoId = p.giocatoriInAsta[p.indiceTurnoAsta];
+        const prossimoGiocatore = p.giocatori.find(g => g.id === prossimoId);
+
+        io.to(p.id).emit('aggiorna_asta', {
+            // Usiamo il valore salvato nella partita, altrimenti "2" se è l'inizio
+            ultimoValore: p.ultimaCartaChiamataValore || "2", 
+            indice: p.ultimoIndiceAsta || 0,
+            prossimoGiocatoreId: prossimoId,
+            prossimoGiocatoreNome: prossimoGiocatore ? prossimoGiocatore.nome : "..."
+        });
+    }
+});
 
     // --- 3d. SCELTA BRISCOLA ---
     // Fase finale dell'asta dove il vincitore dichiara seme e carta
