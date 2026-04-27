@@ -1,4 +1,4 @@
-// js/cards.js - Versione Completa con Punti
+
 const semiInfo = [
     { nome: 'bastoni', suffix: 'bast' },
     { nome: 'spade', suffix: 'spade' },
@@ -18,12 +18,12 @@ function calcolaPunti(valore) {
 
 const mazzo = [];
 
-for (let seme of semiInfo) {
+for (let seme of semiInfo) { // Per ogni seme, creiamo le carte da 1 a 10
     for (let valore = 1; valore <= 10; valore++) {
         mazzo.push({
             seme: seme.nome,
             valore: valore,
-            punti: calcolaPunti(valore), // AGGIUNTO: Fondamentale per il server!
+            punti: calcolaPunti(valore), 
             id: `${valore}_${seme.suffix}`, 
             img: `carte/${seme.nome}/${valore}_${seme.suffix}.png` 
         });

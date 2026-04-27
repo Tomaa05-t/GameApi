@@ -73,19 +73,19 @@ io.on('connection', (socket) => { //quando un nuovo client si connette al server
 
     // --- 3b. UNIRSI A UNA PARTITA ---
     // Gestisce l'ingresso di nuovi giocatori in una stanza esistente
-    socket.on('unisciti_a_partita', (dati) => { 
-        const { roomID, nomePlayer } = dati; 
+    socket.on('unisciti_a_partita', (dati) => { // socket.on = server stai in ascolto
+        const { roomID, nomePlayer } = dati; // Dati inviati dal client: ID della stanza e nome del giocatore che vuole unirsi
         const p = partite[roomID]; 
 
         // Validazione: la stanza deve esistere, deve esserci posto (<5) e deve essere in fase LOBBY
         if (p && p.giocatori.length < 5 && p.stato === 'LOBBY') {
-            p.giocatori.push({ id: socket.id, nome: nomePlayer });
-            p.puntiGiocatori[socket.id] = 0;
+            p.giocatori.push({ id: socket.id, nome: nomePlayer }); // Aggiunge il nuovo giocatore alla lista della partita
+            p.puntiGiocatori[socket.id] = 0; // Inizializza il punteggio del nuovo giocatore
             socket.join(roomID);
-            socket.roomID = roomID;
+            socket.roomID = roomID; 
 
-            io.to(roomID).emit('aggiorna_giocatori', p.giocatori.length);
-            io.emit('aggiorna_lista_partite', ottieniListaLobby());
+            io.to(roomID).emit('aggiorna_giocatori', p.giocatori.length); // Notifica a tutti i partecipanti della stanza il nuovo numero di giocatori
+            io.emit('aggiorna_lista_partite', ottieniListaLobby()); 
 
             // Se raggiungiamo i 5 giocatori, il matchmaking finisce e inizia la partita
             if (p.giocatori.length === 5) {
@@ -95,12 +95,12 @@ io.on('connection', (socket) => { //quando un nuovo client si connette al server
     });
 
     // --- 3c. LOGICA ASTA ---
-    // Gestisce i rilanci o il ritiro (Passo) dei giocatori durante la chiamata
+    // Gestisce i rilanci o il ritiro dei giocatori durante la chiamata
     socket.on('mossa_asta', (dati) => {
-    const p = partite[socket.roomID];
-    if (!p || p.stato !== 'ASTA') return;
+    const p = partite[socket.roomID];// Recupera lo stato della partita a cui il giocatore sta partecipando
+    if (!p || p.stato !== 'ASTA') return; // Validazione: la partita deve esistere e deve essere in fase di ASTA
 
-    // 1. Verifica che sia il turno del giocatore che ha inviato il messaggio
+    // 1. Verifica che sia il turno del giocatore che ha inviato creato la stanza
     const idCorrente = p.giocatoriInAsta[p.indiceTurnoAsta];
     if (socket.id !== idCorrente) return;
 
@@ -114,8 +114,8 @@ io.on('connection', (socket) => { //quando un nuovo client si connette al server
         p.briscolaCorrente = "nessuna";
         p.cartaChiamataCorrente = "A CARICHI";
         
-        p.indiceTurnoGiocata = p.giocatori.findIndex(g => g.id === socket.id);
-        const vincitore = p.giocatori[p.indiceTurnoGiocata];
+        p.indiceTurnoGiocata = p.giocatori.findIndex(g => g.id === socket.id); // Il primo a giocare è sempre il chiamante
+        const vincitore = p.giocatori[p.indiceTurnoGiocata]; // Il vincitore dell'asta è chi ha chiamato "A Carichi"
 
         io.to(p.id).emit('inizio_partita_sincronizzato', {
             seme: "A CARICHI (Senza Briscola)",
@@ -134,7 +134,7 @@ io.on('connection', (socket) => { //quando un nuovo client si connette al server
         p.giocatoriInAsta.splice(p.indiceTurnoAsta, 1);
         
         // Se chi passa era l'ultimo della lista, resettiamo l'indice a 0
-        if (p.indiceTurnoAsta >= p.giocatoriInAsta.length) p.indiceTurnoAsta = 0;
+        if (p.indiceTurnoAsta >= p.giocatoriInAsta.length) p.indiceTurnoAsta = 0; 
     } else {
         // Il giocatore ha chiamato una carta (es. il "3")
         // SALVIAMO I DATI NELLO STATO DELLA PARTITA PER RENDERLI PERSISTENTI
@@ -164,14 +164,14 @@ io.on('connection', (socket) => { //quando un nuovo client si connette al server
             ultimoValore: p.ultimaCartaChiamataValore || "2", 
             indice: p.ultimoIndiceAsta || 0,
             prossimoGiocatoreId: prossimoId,
-            prossimoGiocatoreNome: prossimoGiocatore ? prossimoGiocatore.nome : "..."
+            prossimoGiocatoreNome: prossimoGiocatore ? prossimoGiocatore.nome : "..." // In caso di errori, mostriamo "..." come nome del prossimo giocatore
         });
     }
 });
 
     // --- 3d. SCELTA BRISCOLA ---
     // Fase finale dell'asta dove il vincitore dichiara seme e carta
-socket.on('scelta_briscola', (dati) => {
+    socket.on('scelta_briscola', (dati) => {
         const p = partite[socket.roomID];
         if (!p) return;
 
@@ -215,18 +215,17 @@ socket.on('scelta_briscola', (dati) => {
     const p = partite[socket.roomID];
     if (!p || socket.id !== p.giocatori[p.indiceTurnoGiocata].id) return;
 
-    // LOGICA IDENTIFICAZIONE SOCIO (BLINDATA)
+    // LOGICA IDENTIFICAZIONE SOCIO 
     // Controlliamo se non è una partita "A Carichi" e se il socio non è ancora stato trovato
-    if (!p.isAcarichi && p.idSocio === null) {
-        // Usiamo == per sicurezza, ma avendo usato parseInt sopra, ora sono entrambi numeri
-        if (dati.carta.valore == p.cartaChiamataCorrente && dati.carta.seme == p.briscolaCorrente) {
+    if (!p.isAcarichi && p.idSocio === null) { // Se siamo in una partita standard e il socio non è ancora identificato
+        if (dati.carta.valore == p.cartaChiamataCorrente && dati.carta.seme == p.briscolaCorrente) {  // Se la carta giocata e la carta chiamata corrispondono
             p.idSocio = socket.id;
             console.log("SOCIO TROVATO! È il giocatore:", socket.id);
         }
     }
 
-    p.carteSulTavolo.push({ giocatoreId: socket.id, carta: dati.carta });
-        p.indiceTurnoGiocata = (p.indiceTurnoGiocata + 1) % p.giocatori.length;
+    p.carteSulTavolo.push({ giocatoreId: socket.id, carta: dati.carta }); // Aggiungiamo la carta giocata al tavolo
+        p.indiceTurnoGiocata = (p.indiceTurnoGiocata + 1) % p.giocatori.length; // Passiamo al prossimo giocatore in ordine
 
         // Notifica a tutti i client quale carta è stata messa sul tavolo
         io.to(p.id).emit('aggiorna_tavolo', {
@@ -236,9 +235,9 @@ socket.on('scelta_briscola', (dati) => {
             prossimoTurnoNome: p.giocatori[p.indiceTurnoGiocata].nome
         });
 
-        // Se ci sono 5 carte sul tavolo, la mano è finita e va risolta
+        // Se ci sono 5 carte sul tavolo, la mano è finita e va calcolata
         if (p.carteSulTavolo.length === 5) {
-            setTimeout(() => risolviPresa(p.id), 1500);
+            setTimeout(() => risolviPresa(p.id), 1500); 
         }
     });
 
@@ -246,11 +245,11 @@ socket.on('scelta_briscola', (dati) => {
     socket.on('disconnect', () => {
         const rID = socket.roomID;
         if (partite[rID]) {
-            partite[rID].giocatori = partite[rID].giocatori.filter(g => g.id !== socket.id);
+            partite[rID].giocatori = partite[rID].giocatori.filter(g => g.id !== socket.id); // Rimuoviamo il giocatore disconnesso dalla lista della partita
             if (partite[rID].giocatori.length === 0) {
                 delete partite[rID]; // Se la stanza è vuota, viene eliminata per liberare memoria
             } else {
-                io.to(rID).emit('aggiorna_giocatori', partite[rID].giocatori.length);
+                io.to(rID).emit('aggiorna_giocatori', partite[rID].giocatori.length); // Notifica a tutti i partecipanti della stanza il nuovo numero di giocatori dopo la disconnessione
             }
             io.emit('aggiorna_lista_partite', ottieniListaLobby());
         }
@@ -262,15 +261,15 @@ socket.on('scelta_briscola', (dati) => {
 // Filtra solo le partite visibili nella lobby
 function ottieniListaLobby() {
     return Object.values(partite)
-        .filter(p => p.stato === 'LOBBY')
-        .map(p => ({ id: p.id, creatore: p.creatore, n: p.giocatori.length }));
+        .filter(p => p.stato === 'LOBBY') // Restituisce solo le partite che sono ancora in fase di LOBBY, escludendo quelle già iniziate
+        .map(p => ({ id: p.id, creatore: p.creatore, n: p.giocatori.length })); // Restituisce solo ID, creatore e numero di giocatori per ogni partita in LOBBY
 }
 
 // Inizializza la partita distribuendo le carte
-function avviaPartitaReale(roomID) {
-    const p = partite[roomID];
+function avviaPartitaReale(roomID) { // Questa funzione viene chiamata quando una partita raggiunge 5 giocatori e deve iniziare
+    const p = partite[roomID]; 
     p.stato = 'ASTA';
-    const mazzo = creaMazzo();
+    const mazzo = creaMazzo(); // Crea e mescola il mazzo di carte per la partita
     
     // Distribuzione carte: 8 carte a testa 
     p.giocatori.forEach((g, i) => {
@@ -280,9 +279,9 @@ function avviaPartitaReale(roomID) {
 
     // Avvio dell'asta dopo un breve delay per permettere l'animazione client
     setTimeout(() => {
-        p.giocatoriInAsta = p.giocatori.map(g => g.id);
+        p.giocatoriInAsta = p.giocatori.map(g => g.id); // Tutti i giocatori iniziano l'asta
         const primoId = p.giocatoriInAsta[0];
-        const primoNome = p.giocatori.find(g => g.id === primoId).nome;
+        const primoNome = p.giocatori.find(g => g.id === primoId).nome; // Il primo a parlare è sempre il primo della lista
         
         io.to(roomID).emit('inizia_asta', { 
             prossimoGiocatoreId: primoId,
@@ -297,11 +296,11 @@ function risolviPresa(roomID) {
     const p = partite[roomID];
     if (!p) return;
 
-    let vincente = p.carteSulTavolo[0];
+    let vincente = p.carteSulTavolo[0]; // Il primo giocatore che ha messo la carta è il punto di riferimento per il confronto
     const semeDiMano = vincente.carta.seme; // Seme di uscita
 
-    for (let i = 1; i < p.carteSulTavolo.length; i++) {
-        const sfidante = p.carteSulTavolo[i];
+    for (let i = 1; i < p.carteSulTavolo.length; i++) { // Confrontiamo ogni carta sul tavolo con quella attualmente vincente
+        const sfidante = p.carteSulTavolo[i]; //
 
         if (p.senzaBriscola) {
             // Logica A CARICHI: conta solo il seme di uscita
@@ -324,12 +323,12 @@ function risolviPresa(roomID) {
     }
 
     // Calcolo punti accumulati in questa mano
-    const puntiMano = p.carteSulTavolo.reduce((acc, c) => acc + (c.carta.punti || 0), 0);
-    p.puntiGiocatori[vincente.giocatoreId] += puntiMano;
-    p.indiceTurnoGiocata = p.giocatori.findIndex(g => g.id === vincente.giocatoreId);
-    p.maniGiocate++;
+    const puntiMano = p.carteSulTavolo.reduce((acc, c) => acc + (c.carta.punti || 0), 0); // Aggiorniamo il punteggio del giocatore vincente
+    p.puntiGiocatori[vincente.giocatoreId] += puntiMano; // Il vincitore della mano prende tutte le carte sul tavolo e inizia la prossima mano
+    p.indiceTurnoGiocata = p.giocatori.findIndex(g => g.id === vincente.giocatoreId); //
+    p.maniGiocate++; 
 
-    io.to(roomID).emit('fine_mano', {
+    io.to(roomID).emit('fine_mano', { // Notifica a tutti i client chi ha vinto la mano, quanti punti ha preso e chi inizia la prossima mano
         vincitoreId: vincente.giocatoreId,
         puntiAggiornati: p.puntiGiocatori,
         prossimoTurnoId: vincente.giocatoreId,
@@ -349,7 +348,7 @@ function inviaRisultatiFinali(roomID) {
     if (!p) return;
 
     // Somma dei punti del Chiamante e del Socio
-    const puntiChiamanti = p.puntiGiocatori[p.idChiamante] + (p.idSocio && p.idSocio !== p.idChiamante ? p.puntiGiocatori[p.idSocio] : 0);
+    const puntiChiamanti = p.puntiGiocatori[p.idChiamante] + (p.idSocio && p.idSocio !== p.idChiamante ? p.puntiGiocatori[p.idSocio] : 0); // Il totale dei punti nel mazzo è sempre 120, quindi i "puntiAltri" sono 120 - puntiChiamanti
     const nomiChiamanti = p.giocatori.find(g => g.id === p.idChiamante)?.nome + 
                           (p.idSocio && p.idSocio !== p.idChiamante ? " e " + p.giocatori.find(g => g.id === p.idSocio)?.nome : "");
 

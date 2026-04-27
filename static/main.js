@@ -1,6 +1,5 @@
 /**
  * --- 0. INIZIALIZZAZIONE E STATO GLOBALE ---
- * GameState funge da "Single Source of Truth" per il frontend. 
  * Qui memorizziamo tutto ciò che il client sa sulla partita in corso.
  */
 window.GameState = { 
@@ -28,8 +27,8 @@ let indiceAttualeAsta = -1;
  */
 function assegnaPosti(tuttiIGiocatori) {
     mappaPosti = {};
-    const mioIndice = tuttiIGiocatori.findIndex(g => g.id === socket.id);
-    if (mioIndice === -1) return;
+    const mioIndice = tuttiIGiocatori.findIndex(g => g.id === socket.id); // Trova l'indice del giocatore locale nell'array dei partecipanti
+    if (mioIndice === -1) return; // Sicurezza: se non troviamo il nostro ID, qualcosa è andato storto. Non procediamo con l'assegnazione dei posti.
 
     // Algoritmo di rotazione array: mette il giocatore locale all'indice 0
     const ruotati = [];
@@ -58,7 +57,7 @@ function assegnaPosti(tuttiIGiocatori) {
 socket.on('aggiorna_lista_partite', (partite) => {
     const contenitore = document.getElementById('lista-partite');
     if (!contenitore) return;
-    if (partite.length === 0) {
+    if (partite.length === 0) { // Se non ci sono partite, mostriamo un messaggio di invito a crearne una
         contenitore.innerHTML = '<div class="list-group-item bg-dark text-muted border-secondary text-center">Nessuna partita attiva. Creane una!</div>';
         return;
     }
@@ -84,7 +83,7 @@ socket.on('partita_creata', (roomID) => {
 socket.on('aggiorna_giocatori', (conteggio) => {
     GameState.giocatoriConnessi = conteggio;
     if (GameState.fase === 'ATTESA') {
-        const elCount = document.getElementById('count-giocatori');
+        const elCount = document.getElementById('count-giocatori'); // Aggiorna il contatore grafico nell'HTML
         if (elCount) elCount.innerText = conteggio;
     }
 });
@@ -98,7 +97,7 @@ socket.on('ricevi_carte', (mano) => {
 // Gestione inizio asta: determina chi è il primo a dover parlare
 socket.on('inizia_asta', (dati) => {
     GameState.fase = 'ASTA';
-    GameState.mioTurno = (socket.id === dati.prossimoGiocatoreId);
+    GameState.mioTurno = (socket.id === dati.prossimoGiocatoreId); // Se è il mio turno, abilito i controlli dell'asta. Altrimenti, mostro un messaggio di attesa.
     
     const elTurno = document.getElementById('nome-turno');
     if (elTurno) elTurno.innerText = GameState.mioTurno ? "TOCCA A TE" : dati.prossimoGiocatoreNome;
@@ -110,12 +109,12 @@ socket.on('inizia_asta', (dati) => {
 // Aggiorna l'interfaccia dell'asta dopo ogni rilancio o passo
 socket.on('aggiorna_asta', (dati) => {
     if (dati.ultimoValore) {
-        const elValore = document.getElementById('valore-asta-carta');
-        if (elValore) elValore.innerText = dati.ultimoValore;
+        const elValore = document.getElementById('valore-asta-carta'); // Aggiorna il valore chiamato nell'asta (es. "Asso", "3", ecc.)
+        if (elValore) elValore.innerText = dati.ultimoValore; // Aggiorna l'indice attuale dell'asta per validare i prossimi rilanci
         indiceAttualeAsta = dati.indice;
     }
 
-    GameState.mioTurno = (socket.id === dati.prossimoGiocatoreId);
+    GameState.mioTurno = (socket.id === dati.prossimoGiocatoreId); // Se è il mio turno, abilito i controlli dell'asta. Altrimenti, mostro un messaggio di attesa.
     
     const elTurno = document.getElementById('nome-turno');
     if (elTurno) {
@@ -155,12 +154,12 @@ socket.on('inizio_partita_sincronizzato', (dati) => {
 
     assegnaPosti(dati.giocatori);
     
-    // Pulizia UI asta e aggiornamento HUD di gioco
+    // Pulizia UI asta e aggiornamento gioco
     const interAsta = document.getElementById('interfaccia-asta');
     if (interAsta) interAsta.classList.add('d-none');
     
-    document.getElementById('visualizza-numero-chiamato').innerText = GameState.cartaChiamata;
-    document.getElementById('visualizza-briscola').innerText = GameState.briscola.toUpperCase();
+    document.getElementById('visualizza-numero-chiamato').innerText = GameState.cartaChiamata;// Mostra a schermo la carta chiamata 
+    document.getElementById('visualizza-briscola').innerText = GameState.briscola.toUpperCase();// Mostra a schermo il seme di briscola
     
     const elTurno = document.getElementById('nome-turno');
     if (elTurno) {
@@ -174,7 +173,7 @@ socket.on('inizio_partita_sincronizzato', (dati) => {
 // Mostra a schermo la carta giocata da un avversario e aggiorna il turno
 socket.on('aggiorna_tavolo', (dati) => {
     if (dati.giocatoreId !== socket.id) {
-        disegnaCartaAlCentro(dati.carta, dati.giocatoreId);
+        disegnaCartaAlCentro(dati.carta, dati.giocatoreId); 
     }
     GameState.mioTurno = (socket.id === dati.prossimoTurnoId);
     
@@ -186,10 +185,10 @@ socket.on('aggiorna_tavolo', (dati) => {
 
 // Al termine di ogni mano (5 carte a terra), aggiorna i punti e pulisce il tavolo
 socket.on('fine_mano', (dati) => {
-    Object.keys(dati.puntiAggiornati).forEach(id => {
+    Object.keys(dati.puntiAggiornati).forEach(id => { // Aggiorna i punti di tutti i giocatori in base al risultato della mano appena conclusa
         const pos = mappaPosti[id];
-        const el = document.getElementById(`punti-${pos}`);
-        if (el) el.innerText = dati.puntiAggiornati[id];
+        const el = document.getElementById(`punti-${pos}`); // Se l'elemento esiste, aggiorna il punteggio mostrato
+        if (el) el.innerText = dati.puntiAggiornati[id]; // Aggiorna il punteggio mostrato nell'interfaccia per ogni giocatore in base alla mappa dei posti e ai punti aggiornati ricevuti dal server
     });
 
     setTimeout(() => {
@@ -229,12 +228,12 @@ function entraInPartita(id) {
 
 // Rimuove la carta dalla mano locale e informa il server della mossa
 function giocaCartaUmano(index) {
-    if (GameState.fase !== 'GIOCANDO' || !GameState.mioTurno) return;
-    const carta = GameState.miaMano.splice(index, 1)[0];
+    if (GameState.fase !== 'GIOCANDO' || !GameState.mioTurno) return; // Se non siamo in fase di giocare o non abbiamo il turno, non facciamo nulla
+    const carta = GameState.miaMano.splice(index, 1)[0];// Rimuove la carta giocata dalla mano locale 
     GameState.mioTurno = false;
     disegnaCartaAlCentro(carta, socket.id);
     disegnaManoReale(GameState.miaMano);
-    socket.emit('gioca_carta', { carta: carta });
+    socket.emit('gioca_carta', { carta: carta });// Informa il server della mossa
 }
 
 // Crea l'elemento visuale della carta giocata al centro del tavolo
@@ -250,11 +249,11 @@ function disegnaCartaAlCentro(carta, giocatoreId) {
 
 // Gestisce la visibilità delle macro-aree dell'app (Lobby vs Tavolo)
 function renderGame() {
-    document.getElementById('area-lobby').classList.toggle('d-none', GameState.fase !== 'LOBBY');
-    document.getElementById('area-attesa').classList.toggle('d-none', GameState.fase !== 'ATTESA');
+    document.getElementById('area-lobby').classList.toggle('d-none', GameState.fase !== 'LOBBY'); // Mostra la lobby solo se siamo in fase di lobby
+    document.getElementById('area-attesa').classList.toggle('d-none', GameState.fase !== 'ATTESA');// Mostra l'area di attesa solo se siamo in fase di attesa
     document.getElementById('tavolo-gioco').classList.toggle('d-none', !['ASTA', 'GIOCANDO'].includes(GameState.fase));
 
-    if (GameState.fase === 'ATTESA') {
+    if (GameState.fase === 'ATTESA') { // Se siamo in attesa, aggiorniamo il contatore dei giocatori connessi
         document.getElementById('count-giocatori').innerText = GameState.giocatoriConnessi;
     }
 }
@@ -304,11 +303,11 @@ function gestisciVisibilitaAsta() {
 // Trasforma il pannello dell'asta nel pannello di scelta briscola (per il vincitore)
 function preparaSceltaBriscola() {
     const container = document.getElementById('interfaccia-asta');
-    container.classList.remove('d-none');
+    container.classList.remove('d-none');// Mostra l'interfaccia
     container.style.opacity = "1";
     container.style.pointerEvents = "auto";
 
-    document.getElementById('btn-chiama').classList.add('d-none');
+    document.getElementById('btn-chiama').classList.add('d-none');// Nasconde i controlli dell'asta normale
     document.getElementById('btn-passo').classList.add('d-none');
     document.getElementById('select-numero').classList.add('d-none');
     document.getElementById('scelta-seme').classList.remove('d-none');
@@ -321,8 +320,7 @@ function preparaSceltaBriscola() {
  * --- 4. EVENTI DOM E SETUP INIZIALE ---
  * Assegnazione dei listener agli elementi HTML al caricamento della pagina.
  */
-document.addEventListener("DOMContentLoaded", () => {
-    
+document.addEventListener("DOMContentLoaded", () => {  // Quando il DOM è completamente caricato, assegniamo i listener ai bottoni e agli elementi interattivi
     // Bottone per creare una nuova stanza
     document.getElementById('btn-crea').onclick = () => {
         const nome = prompt("Inserisci il tuo nome:") || "Player";
@@ -332,9 +330,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Bottone per rilanciare nell'asta
     document.getElementById('btn-chiama').onclick = () => {
-        const val = parseInt(document.getElementById('select-numero').value);
-        const idx = ordineCarteAsta.indexOf(val);
-        // Validazione: si può chiamare solo una carta che viene DOPO nella gerarchia (es. se è Asso, non puoi chiamare nulla)
+        const val = parseInt(document.getElementById('select-numero').value); // Valore numerico della carta scelta per l'asta 
+        const idx = ordineCarteAsta.indexOf(val);// Indice della carta scelta nell'ordine di validità dell'asta 
+        // Validazione: si può chiamare solo una carta che viene DOPO nella gerarchia
         if (idx > indiceAttualeAsta) {
             const testo = document.getElementById('select-numero').options[document.getElementById('select-numero').selectedIndex].text;
             socket.emit('mossa_asta', { tipo: 'CHIAMATA', valore: testo, indice: idx });
@@ -349,7 +347,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // Bottone speciale "A CARICHI": salta l'asta e gioca 1 vs 4 senza briscola
     document.getElementById('btn-carichi').onclick = () => {
         if (!GameState.mioTurno) {
-            alert("Non è il tuo turno di parlare!");
+            alert("Non è il tuo turno di giocare");
             return;
         }
         if (confirm("Sei sicuro di voler chiamare A CARICHI? Sfiderai tutti da solo senza briscola fissa!")) {
@@ -357,8 +355,8 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     };
 
-    // Selezione del seme di briscola (attivo solo per chi vince l'asta normale)
-    document.querySelectorAll('.btn-seme').forEach(btn => {
+    // Selezione del seme di briscola 
+    document.querySelectorAll('.btn-seme').forEach(btn => { // Assegna un listener a ciascun bottone di scelta seme nella fase di scelta briscola
         btn.onclick = () => {
             const seme = btn.getAttribute('data-seme');
             let carta = document.getElementById('valore-asta-carta').innerText;
