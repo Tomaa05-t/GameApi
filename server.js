@@ -191,8 +191,9 @@ io.on('connection', (socket) => { //quando un nuovo client si connette al server
             // Partita standard: resettiamo i carichi e prepariamo la ricerca del socio
             p.isAcarichi = false;
             // IMPORTANTE: convertiamo il valore in Numero per evitare bug nel confronto successivo
-            p.cartaChiamataCorrente = parseInt(dati.carta); 
-            p.idSocio = null; // Il socio non è ancora noto
+            // Rimuovi parseInt, mantieni il valore ricevuto dal client (che è una stringa)
+        p.cartaChiamataCorrente = dati.carta; 
+        p.idSocio = null;
         }
 
         // Il primo a giocare la prima mano è sempre il chiamante
@@ -364,7 +365,7 @@ function inviaRisultatiFinali(roomID) {
     io.emit('aggiorna_lista_partite', ottieniListaLobby());
 }
 
-// CREAZIONE E MISCHIAMENTO MAZZO
+// CREAZIONE E MISCHIAMENTO MAZZO, crea un array di 40 carte
 function creaMazzo() {
     const semi = ['bastoni', 'spade', 'coppe', 'ori'];
     const suffix = { 'bastoni': 'bast', 'spade': 'spade', 'coppe': 'coppe', 'ori': 'ori' };

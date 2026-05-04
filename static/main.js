@@ -47,7 +47,7 @@ function assegnaPosti(tuttiIGiocatori) {
 }
 
 /**
- * --- 2. ASCOLTO EVENTI SERVER (SOCKET.IO) ---
+ * 2. ASCOLTO EVENTI SERVER (SOCKET.IO)
  * Qui gestiamo tutti i messaggi in arrivo dal server. 
  * Ogni evento aggiorna lo stato locale (GameState) e la UI.
  * Socket.io è una libreria che permette una comunicazione bidirezionale, in tempo reale e basata su eventi tra il browser (Client) e il server (Node.js)
@@ -260,12 +260,12 @@ function renderGame() {
 
 // Renderizza le carte in mano all'utente, gestendo l'opacità e l'interattività basandosi sul turno
 function disegnaManoReale(carte) {
-    const box = document.getElementById('mie-carte');
+    const box = document.getElementById('mie-carte');// Raccoglie le carte in mano
     if (!box) return;
     box.innerHTML = '';
     
-    carte.forEach((c, i) => {
-        const img = document.createElement('img');
+    carte.forEach((c, i) => { // Per ogni carta in mano, creiamo un elemento img e lo configuriamo
+        const img = document.createElement('img'); 
         img.src = c.img;
         
         // Verifica se il giocatore può interagire con la carta
